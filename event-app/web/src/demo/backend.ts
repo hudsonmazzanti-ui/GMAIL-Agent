@@ -23,7 +23,8 @@ interface Route {
 }
 
 const FAKE_POS_BASE = 'http://fake-pos';
-const STORE_KEY = 'event-hub-demo-v1';
+// Bump when the seed changes so returning visitors get the new sample data.
+const STORE_KEY = 'event-hub-demo-v2';
 
 export class DemoBackend {
   private routes: Route[] = [];

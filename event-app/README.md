@@ -42,13 +42,13 @@ The seed script uses `STAFF_PASSWORD` if set. Run it on an empty database, or se
 ## Running an event
 
 1. **Staff → New event.** Set the game, format, match length, round time, capacity and top cut.
-2. **Open registration.** Players log in with a name and 4-digit PIN (no email needed) and tap **Register**.
+2. **Open registration.** Players log in with just their name (no email or password) and tap **Register**. Anyone who wants to stop others from using their name can add a 4-digit PIN, either when signing up or later from their profile (tap their name in the header).
 3. **Check-in.** As players arrive, tap **Check in**. Walk-ins: type their name under *Add walk-in*.
 4. **Start event.** This pairs round 1. Press **Start round** to start the timer, then show `/display/<id>` on a TV.
 5. Players see their table on their phone, report the result and their opponent confirms. Disputes show up in red for a judge. **Enter / Edit** lets staff set any result.
 6. When every result is in, press **Pair round N**. After the last Swiss round the button becomes **Start top N**, and then **Finish event**.
 
-Players can drop from their phone. Staff can drop players, re-pair a round before it starts, add time, reset forgotten PINs (*Staff → Players*), and fix earlier Swiss results while Swiss is still running.
+Players can drop from their phone. Staff can drop players, re-pair a round before it starts, add time, set, reset or remove PINs (*Staff → Players*), and fix earlier Swiss results while Swiss is still running.
 
 ## Entry fees with PayPal POS
 
@@ -97,4 +97,4 @@ web/src/              React + Tailwind UI (pages/, components/)
 scripts/              demo event walker (`npm run seed`, API test) and the fake PayPal POS
 ```
 
-Security model: this is meant for a trusted local network. Staff share one password. Player PINs are hashed, and repeated wrong guesses are locked out for 5 minutes. Don't expose the port to the internet without putting HTTPS and a stronger auth layer in front of it.
+Security model: this is meant for a trusted local network. Staff share one password. Player PINs are optional. Without one, anyone on the store Wi-Fi could log in as that player and report results, so staff confirm disputes and can correct any result. PINs are hashed, and repeated wrong guesses are locked out for 5 minutes. Don't expose the port to the internet without putting HTTPS and a stronger auth layer in front of it.

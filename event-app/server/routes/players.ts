@@ -29,14 +29,15 @@ export function playerRoutes(app: FastifyInstance, db: DB) {
     return { id, name };
   });
 
-  app.patch<{ Params: { id: string }; Body: { name?: string; pin?: string; gameId?: string } }>('/api/players/:id', async (req) => {
+  app.patch<{ Params: { id: string }; Body: { name?: string; pin?: string | null; gameId?: string } }>('/api/players/:id', async (req) => {
     requireStaff(req);
     const id = Number(req.params.id);
     const b = req.body ?? {};
     if (b.name !== undefined) db.prepare('UPDATE players SET name = ? WHERE id = ?').run(b.name.trim(), id);
     if (b.gameId !== undefined) db.prepare('UPDATE players SET game_id = ? WHERE id = ?').run(b.gameId.trim() || null, id);
     if (b.pin !== undefined) {
-      db.prepare('UPDATE players SET pin_hash = ? WHERE id = ?').run(hashPin(validatePin(b.pin)), id);
+      // `pin: null` removes the PIN, so the player logs in by name only.
+      db.prepare('UPDATE players SET pin_hash = ? WHERE id = ?').run(b.pin === null ? null : hashPin(validatePin(b.pin)), id);
       db.prepare('DELETE FROM sessions WHERE player_id = ?').run(id);
     }
     return { ok: true };

@@ -4,10 +4,10 @@ import { money } from '../api';
 import { ask } from '../components/Dialog';
 import { useAuth } from '../hooks';
 import { DemoBackend } from './backend';
-import { DEMO_PIN } from './seed';
+import { DEMO_PIN, DEMO_PIN_PLAYER } from './seed';
 
 /** Demo controls: switch who you are, ring up sales on the fake PayPal POS, start over. */
-export function DemoBar({ backend, staffToken }: { backend: DemoBackend; staffToken: string }) {
+export function DemoBar({ backend }: { backend: DemoBackend }) {
   const { viewer, refresh } = useAuth();
   const navigate = useNavigate();
   const [players, setPlayers] = useState<{ id: number; name: string }[]>([]);
@@ -26,12 +26,15 @@ export function DemoBar({ backend, staffToken }: { backend: DemoBackend; staffTo
 
   const current = viewer.kind === 'staff' ? 'staff' : viewer.kind === 'player' ? String(viewer.playerId) : 'anon';
 
+  // Each switch starts a new session, so logging out in the app never breaks the switcher.
   const switchTo = async (value: string) => {
-    if (value === 'staff') backend.token = staffToken;
-    else if (value === 'anon') backend.token = null;
+    if (value === 'anon') backend.token = null;
     else {
       const token = Array.from(crypto.getRandomValues(new Uint8Array(16)), (b) => b.toString(16).padStart(2, '0')).join('');
-      backend.db.prepare("INSERT INTO sessions (token, kind, player_id) VALUES (?, 'player', ?)").run(token, Number(value));
+      const staff = value === 'staff';
+      backend.db
+        .prepare('INSERT INTO sessions (token, kind, player_id) VALUES (?, ?, ?)')
+        .run(token, staff ? 'staff' : 'player', staff ? null : Number(value));
       backend.token = token;
     }
     backend.save();
@@ -74,6 +77,9 @@ export function DemoBar({ backend, staffToken }: { backend: DemoBackend; staffTo
         <button className="btn-secondary btn-sm" onClick={() => setPosOpen(!posOpen)} aria-expanded={posOpen}>
           {posOpen ? 'Hide' : 'Open'} fake PayPal POS
         </button>
+        <span className="hidden text-xs lg:inline">
+          Or use Log in: players need only their name ({DEMO_PIN_PLAYER} has PIN {DEMO_PIN}).
+        </span>
         <button className="btn-secondary btn-sm ml-auto" onClick={reset}>
           Start over
         </button>
@@ -132,7 +138,9 @@ export function DemoBar({ backend, staffToken }: { backend: DemoBackend; staffTo
           </div>
         </div>
       )}
-      <p className="sr-only">Demo players log in with PIN {DEMO_PIN}. Any staff password works.</p>
+      <p className="sr-only">
+        Demo players log in with just their name, except {DEMO_PIN_PLAYER} (PIN {DEMO_PIN}). Staff password: changeme.
+      </p>
     </div>
   );
 }

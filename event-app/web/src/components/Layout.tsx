@@ -37,9 +37,13 @@ export function Layout() {
               </Link>
             ) : (
               <>
-                <span className="max-w-[9rem] truncate text-slate-600 dark:text-slate-300">
-                  {viewer.kind === 'staff' ? 'Staff' : viewer.name}
-                </span>
+                {viewer.kind === 'staff' ? (
+                  <span className="text-slate-600 dark:text-slate-300">Staff</span>
+                ) : (
+                  <Link to="/me" className="max-w-[9rem] truncate text-slate-600 underline-offset-2 hover:underline dark:text-slate-300" title="My profile">
+                    {viewer.name}
+                  </Link>
+                )}
                 <button className="btn-secondary btn-sm" onClick={logout}>
                   Log out
                 </button>

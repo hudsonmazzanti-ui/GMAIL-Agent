@@ -61,6 +61,12 @@ export function validatePin(pin: unknown): string {
   return pin;
 }
 
+/** PINs are optional: empty or missing means "no PIN", anything else must be 4 digits. */
+export function optionalPin(pin: unknown): string | null {
+  if (pin === undefined || pin === null || pin === '') return null;
+  return validatePin(pin);
+}
+
 /** Simple lockout so 4-digit PINs can't be brute-forced from the store Wi-Fi. */
 const failures = new Map<string, { count: number; until: number }>();
 const MAX_FAILURES = 5;

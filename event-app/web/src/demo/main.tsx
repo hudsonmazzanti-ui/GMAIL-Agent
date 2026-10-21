@@ -10,22 +10,10 @@ import { seedDemo } from './seed';
 const root = createRoot(document.getElementById('root')!);
 
 async function start() {
-  let { backend, fresh } = await DemoBackend.create();
-  let staffToken: string;
+  const { backend, fresh } = await DemoBackend.create();
   if (fresh) {
-    staffToken = (await seedDemo(backend)).staffToken;
-    backend.token = staffToken;
-    backend.db.exec(`INSERT OR REPLACE INTO settings (key, value) VALUES ('demo_staff_token', '${staffToken}')`);
+    backend.token = (await seedDemo(backend)).staffToken;
     backend.save();
-  } else {
-    const row = backend.db.prepare("SELECT value FROM settings WHERE key = 'demo_staff_token'").get() as { value: string } | undefined;
-    if (!row) {
-      // Saved data from an older demo: start fresh.
-      DemoBackend.clearSaved();
-      ({ backend } = await DemoBackend.create());
-      staffToken = (await seedDemo(backend)).staffToken;
-      backend.token = staffToken;
-    } else staffToken = row.value;
   }
   installShims(backend);
 
@@ -33,7 +21,7 @@ async function start() {
     <StrictMode>
       <App
         router={({ children }) => <MemoryRouter initialEntries={['/']}>{children}</MemoryRouter>}
-        banner={<DemoBar backend={backend} staffToken={staffToken} />}
+        banner={<DemoBar backend={backend} />}
       />
     </StrictMode>,
   );

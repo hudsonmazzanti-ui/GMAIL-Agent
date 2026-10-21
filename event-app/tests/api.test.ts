@@ -73,6 +73,42 @@ describe('full event through the API', () => {
     expect(st.registrations.map((r: any) => r.status)).toEqual(['registered']);
   });
 
+  it('makes the PIN optional', async () => {
+    // No PIN: log in with the name alone, from any phone.
+    const a = new Client(app);
+    await a.post('/api/auth/player/signup', { name: 'No Pin', pin: '' });
+    const again = new Client(app);
+    expect(await again.post('/api/auth/player/login', { name: 'No Pin' })).toMatchObject({ ok: true });
+    expect((await again.get('/api/auth/me')).hasPin).toBe(false);
+    await again.post('/api/auth/player/login', { name: 'Nobody Here' }, 404);
+    await a.post('/api/auth/player/signup', { name: 'Bad Pin', pin: '12' }, 400);
+
+    // Adding a PIN: the name now needs it, and other phones are logged out.
+    await a.post('/api/auth/player/pin', { pin: '2468' });
+    expect((await again.get('/api/auth/me')).viewer.kind).toBe('anon');
+    const b = new Client(app);
+    expect(await b.post('/api/auth/player/login', { name: 'No Pin' })).toEqual({ ok: false, needsPin: true });
+    expect((await b.get('/api/auth/me')).viewer.kind).toBe('anon');
+    await b.post('/api/auth/player/login', { name: 'No Pin', pin: '1111' }, 401);
+    await b.post('/api/auth/player/login', { name: 'No Pin', pin: '2468' });
+
+    // Changing or removing it needs the current PIN.
+    await b.post('/api/auth/player/pin', { currentPin: '0000', pin: null }, 401);
+    await b.post('/api/auth/player/pin', { currentPin: '2468', pin: null });
+    expect(await new Client(app).post('/api/auth/player/login', { name: 'No Pin' })).toMatchObject({ ok: true });
+
+    // Staff walk-ins have no PIN and can log in by name; staff can set and remove PINs.
+    const staff = new Client(app);
+    await staff.post('/api/auth/staff/login', { password: 'secret123' });
+    const walkIn = await staff.post('/api/players', { name: 'Desk Walkin' });
+    await new Client(app).post('/api/auth/player/login', { name: 'Desk Walkin' });
+    await staff.call('PATCH', `/api/players/${walkIn.id}`, { pin: '1357' });
+    expect((await new Client(app).post('/api/auth/player/login', { name: 'Desk Walkin' })).needsPin).toBe(true);
+    await staff.call('PATCH', `/api/players/${walkIn.id}`, { pin: null });
+    expect((await new Client(app).post('/api/auth/player/login', { name: 'Desk Walkin' })).ok).toBe(true);
+    await new Client(app).post('/api/auth/player/pin', { pin: '1234' }, 401); // must be logged in
+  });
+
   it('locks out PIN guessing', async () => {
     const x = new Client(app);
     await x.post('/api/auth/player/signup', { name: 'Locked', pin: '4321' });

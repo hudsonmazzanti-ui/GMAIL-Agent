@@ -5,6 +5,8 @@ export const DEMO_PLAYERS = [
   'Ash K.', 'Brock T.', 'Misty W.', 'Gary O.', 'Dawn B.', 'Iris N.', 'Cilan D.', 'Serena Y.',
   'Clemont L.', 'Lillie A.', 'Hau M.', 'Gloria S.', 'Hop P.', 'Nemona Q.',
 ];
+/** Only this player has a PIN, to show the PIN prompt; everyone else logs in by name. */
+export const DEMO_PIN_PLAYER = 'Ash K.';
 export const DEMO_PIN = '1234';
 
 const day = (offset: number) => new Date(Date.now() + offset * 86_400_000).toISOString().slice(0, 10);
@@ -23,7 +25,7 @@ export async function seedDemo(b: DemoBackend) {
 
   const players: { id: number; token: string }[] = [];
   for (const name of DEMO_PLAYERS) {
-    const r = await call(null, 'POST', '/api/auth/player/signup', { name, pin: DEMO_PIN });
+    const r = await call(null, 'POST', '/api/auth/player/signup', { name, pin: name === DEMO_PIN_PLAYER ? DEMO_PIN : '' });
     players.push({ id: r.body.playerId, token: r.token! });
   }
   const tokenOf = new Map(players.map((p) => [p.id, p.token]));

@@ -15,13 +15,25 @@ export function Login() {
   const [pin, setPin] = useState('');
   const [gameId, setGameId] = useState('');
   const [password, setPassword] = useState('');
-  const { busy, error, run } = useAction();
+  // Set once the server says this player protected their name with a PIN.
+  const [needsPin, setNeedsPin] = useState(false);
+  const { busy, error, setError, run } = useAction();
+  const switchMode = (m: Mode) => {
+    setMode(m);
+    setError(null);
+    setNeedsPin(false);
+  };
 
   const submit = (e: FormEvent) => {
     e.preventDefault();
     run(async () => {
-      if (mode === 'login') await api('/api/auth/player/login', { name, pin });
-      else if (mode === 'signup') await api('/api/auth/player/signup', { name, pin, gameId });
+      if (mode === 'login') {
+        const res = await api<{ ok: boolean; needsPin?: boolean }>('/api/auth/player/login', { name, pin });
+        if (res.needsPin) {
+          setNeedsPin(true);
+          return;
+        }
+      } else if (mode === 'signup') await api('/api/auth/player/signup', { name, pin, gameId });
       else await api(staffSetupNeeded ? '/api/auth/staff/setup' : '/api/auth/staff/login', { password });
       await refresh();
       navigate(params.get('next') ?? (mode === 'staff' ? '/staff' : '/'));
@@ -37,7 +49,7 @@ export function Login() {
           ['staff', 'Staff'],
         ]}
         value={mode}
-        onChange={setMode}
+        onChange={switchMode}
       />
       <form onSubmit={submit} className="card space-y-4">
         {mode === 'staff' ? (
@@ -62,22 +74,32 @@ export function Login() {
                 autoComplete="username"
                 placeholder="e.g. Sam R."
                 value={name}
-                onChange={(e) => setName(e.target.value)}
+                onChange={(e) => {
+                  setName(e.target.value);
+                  setNeedsPin(false);
+                  setPin('');
+                }}
               />
             </label>
-            <label className="block">
-              <span className="label">{mode === 'signup' ? 'Choose a 4-digit PIN' : '4-digit PIN'}</span>
-              <input
-                className="input font-mono tracking-[0.5em]"
-                inputMode="numeric"
-                pattern="\d{4}"
-                maxLength={4}
-                autoComplete={mode === 'signup' ? 'new-password' : 'current-password'}
-                type="password"
-                value={pin}
-                onChange={(e) => setPin(e.target.value.replace(/\D/g, ''))}
-              />
-            </label>
+            {(mode === 'signup' || needsPin) && (
+              <label className="block">
+                <span className="label">{mode === 'signup' ? 'PIN (optional)' : 'Your 4-digit PIN'}</span>
+                <input
+                  className="input font-mono tracking-[0.5em]"
+                  inputMode="numeric"
+                  pattern="\d{4}"
+                  maxLength={4}
+                  autoFocus={needsPin}
+                  autoComplete={mode === 'signup' ? 'new-password' : 'current-password'}
+                  type="password"
+                  value={pin}
+                  onChange={(e) => setPin(e.target.value.replace(/\D/g, ''))}
+                />
+                {mode === 'signup' && (
+                  <span className="mt-1 block text-xs text-slate-500">Add a PIN so nobody else can use your name. You can add one later.</span>
+                )}
+              </label>
+            )}
             {mode === 'signup' && (
               <label className="block">
                 <span className="label">Game ID (optional)</span>
@@ -90,7 +112,20 @@ export function Login() {
         <button className="btn-primary w-full" disabled={busy}>
           {mode === 'login' ? 'Log in' : mode === 'signup' ? 'Create profile' : staffSetupNeeded ? 'Set password' : 'Log in as staff'}
         </button>
-        {mode === 'login' && <p className="text-center text-xs text-slate-500">Forgot your PIN? Ask staff to reset it.</p>}
+        {mode === 'login' && (
+          <p className="text-center text-xs text-slate-500">
+            {needsPin ? (
+              'Forgot your PIN? Ask staff to reset it.'
+            ) : (
+              <>
+                First time here?{' '}
+                <button type="button" className="text-indigo-600 underline dark:text-indigo-400" onClick={() => switchMode('signup')}>
+                  Create a profile
+                </button>
+              </>
+            )}
+          </p>
+        )}
       </form>
     </div>
   );

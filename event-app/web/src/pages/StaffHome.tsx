@@ -105,6 +105,14 @@ function PlayersTab() {
       await load();
     });
   };
+  const removePin = async (p: PlayerRow) => {
+    if (!(await ask(`Remove ${p.name}'s PIN? They'll log in with just their name.`, { confirmLabel: 'Remove PIN' }))) return;
+    run(async () => {
+      await api(`/api/players/${p.id}`, { pin: null }, 'PATCH');
+      setNotice(`PIN removed for ${p.name}.`);
+      await load();
+    });
+  };
   const rename = async (p: PlayerRow) => {
     const name = await askText('Name:', p.name);
     if (!name || name === p.name) return;
@@ -125,7 +133,7 @@ function PlayersTab() {
             <span className="flex-1 font-medium">
               {p.name}
               {p.gameId && <span className="ml-2 text-xs text-slate-500">{p.gameId}</span>}
-              {!p.hasPin && <span className="pill ml-2 bg-amber-100 text-amber-800 dark:bg-amber-900/50 dark:text-amber-300">no PIN</span>}
+              {!p.hasPin && <span className="pill ml-2 bg-slate-200 text-slate-600 dark:bg-slate-800 dark:text-slate-300">no PIN</span>}
             </span>
             <button className="btn-secondary btn-sm" disabled={busy} onClick={() => rename(p)}>
               Rename
@@ -133,6 +141,11 @@ function PlayersTab() {
             <button className="btn-secondary btn-sm" disabled={busy} onClick={() => resetPin(p)}>
               {p.hasPin ? 'Reset PIN' : 'Set PIN'}
             </button>
+            {!!p.hasPin && (
+              <button className="btn-secondary btn-sm" disabled={busy} onClick={() => removePin(p)}>
+                Remove PIN
+              </button>
+            )}
           </li>
         ))}
       </ul>

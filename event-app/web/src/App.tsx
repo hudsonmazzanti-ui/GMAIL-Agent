@@ -9,6 +9,7 @@ import { EventList } from './pages/EventList';
 import { EventPage } from './pages/EventPage';
 import { Login } from './pages/Login';
 import { PrintSlips } from './pages/PrintSlips';
+import { Profile } from './pages/Profile';
 import { StaffEvent } from './pages/StaffEvent';
 import { StaffHome } from './pages/StaffHome';
 
@@ -33,6 +34,7 @@ export function App({ router: Router, banner }: { router: (p: { children: ReactN
           <Route element={<Layout />}>
             <Route path="/" element={<EventList />} />
             <Route path="/login" element={<Login />} />
+            <Route path="/me" element={<Profile />} />
             <Route path="/events/:id" element={<EventPage />} />
             <Route path="/staff" element={<StaffHome />} />
             <Route path="/staff/events/:id" element={<StaffEvent />} />
