@@ -1,0 +1,4 @@
+added,title,source,url,why,read
+2026-10-20,"Sample article: how inbox rules work",Example Newsletter,https://example.com/a,"Placeholder row, replaced on first real update.",FALSE
+2026-10-19,"Sample article with a, comma in the title",Another Digest,https://example.com/b,Shows quoted CSV fields parse correctly.,FALSE
+2026-10-18,Already read item,Example Newsletter,https://example.com/c,Should be hidden.,TRUE

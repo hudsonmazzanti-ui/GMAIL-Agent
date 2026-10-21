@@ -1,0 +1,5 @@
+when,title,type,details
+2026-10-21T15:00,Sample meeting,event,Placeholder row
+2026-10-22,Sample bill due,reminder,From an email reminder
+2026-10-24T09:30,Sample appointment,event,
+2026-11-30T10:00,Outside 7-day window,event,Should be hidden

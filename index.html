@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Gmail Agent</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+</head>
+<body>
+  <main>
+    <section class="card usage">
+      <div class="chart-wrap">
+        <canvas id="usage-chart" aria-label="Claude plan usage over time" role="img"></canvas>
+        <p class="state" id="usage-state">Loading…</p>
+      </div>
+      <div class="usage-footer">
+        <h2>Usage %</h2>
+        <div class="toggle" role="group" aria-label="Chart range">
+          <button type="button" data-mode="daily" aria-pressed="true">Daily</button>
+          <button type="button" data-mode="monthly" aria-pressed="false">Monthly</button>
+        </div>
+      </div>
+    </section>
+
+    <div class="cards">
+      <section class="card">
+        <h2>Articles worth reading</h2>
+        <ul class="list" id="articles"><li class="state">Loading…</li></ul>
+      </section>
+      <section class="card">
+        <h2>Calendar / reminders</h2>
+        <div id="calendar"><p class="state">Loading…</p></div>
+      </section>
+    </div>
+
+    <footer id="updated"></footer>
+  </main>
+  <script src="app.js"></script>
+</body>
+</html>
