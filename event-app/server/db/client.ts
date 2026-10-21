@@ -64,6 +64,7 @@ export interface EventRow {
   pos_product_uuid: string | null;
   pos_variant_uuid: string | null;
   join_code: string | null;
+  top_cut_auto: number;
   created_at: string;
 }
 

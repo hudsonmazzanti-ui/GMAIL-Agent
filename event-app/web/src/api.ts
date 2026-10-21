@@ -6,7 +6,7 @@ export type { EventState, EventRow, Viewer };
 export type RoundView = EventState['rounds'][number];
 export type MatchView = RoundView['matches'][number];
 export type StandingView = EventState['standings'][number];
-export type EventListItem = EventRow & { registered: number };
+export type EventListItem = EventRow & { registered: number; joined: number };
 
 export class ApiError extends Error {
   constructor(public status: number, message: string) {

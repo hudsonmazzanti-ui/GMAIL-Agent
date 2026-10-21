@@ -1,60 +1,105 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link, Navigate, useNavigate } from 'react-router-dom';
 import { api, formatDate, type EventListItem } from '../api';
-import { EventForm } from '../components/EventForm';
-import { Empty, ErrorNote, StatusPill, Tabs } from '../components/ui';
+import { QuickEventForm } from '../components/EventForm';
+import { SideBar, ToolSection } from '../components/SideBar';
+import { Empty, ErrorNote, StatusPill } from '../components/ui';
 import { useAction, useAuth, useLive } from '../hooks';
 import { ask, askText } from '../components/Dialog';
 
-type Tab = 'events' | 'new' | 'players' | 'settings';
-
+/** Staff home: tonight's events and one way to make a new one. Store-wide tools live in the side bar. */
 export function StaffHome() {
   const { viewer } = useAuth();
-  const [tab, setTab] = useState<Tab>('events');
-  if (viewer.kind !== 'staff') return <Navigate to="/login?mode=staff&next=/staff" replace />;
-  return (
-    <div className="space-y-4">
-      <h1 className="text-2xl font-bold">Staff</h1>
-      <Tabs<Tab>
-        tabs={[
-          ['events', 'Events'],
-          ['new', 'New event'],
-          ['players', 'Players'],
-          ['settings', 'Settings'],
-        ]}
-        value={tab}
-        onChange={setTab}
-      />
-      {tab === 'events' && <EventsTab />}
-      {tab === 'new' && <NewEvent />}
-      {tab === 'players' && <PlayersTab />}
-      {tab === 'settings' && <SettingsTab />}
-    </div>
-  );
-}
-
-function EventsTab() {
-  const [events, setEvents] = useState<EventListItem[]>([]);
+  const [toolsOpen, setToolsOpen] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const [events, setEvents] = useState<EventListItem[] | null>(null);
   const load = useCallback(() => api<EventListItem[]>('/api/events').then(setEvents), []);
   useEffect(() => {
-    load();
-  }, [load]);
+    if (viewer.kind === 'staff') load();
+  }, [load, viewer.kind]);
   useLive('/api/live', load);
-  if (!events.length) return <div className="card"><Empty>No events yet — create one in “New event”.</Empty></div>;
+
+  if (viewer.kind !== 'staff') return <Navigate to="/login?mode=staff&next=/staff" replace />;
+  if (!events) return null;
+  const current = events.filter((e) => e.status !== 'complete');
+  const past = events.filter((e) => e.status === 'complete');
+  const showForm = creating || current.length === 0;
+
   return (
-    <div className="card divide-y divide-slate-100 p-0 dark:divide-slate-800">
-      {events.map((e) => (
-        <Link key={e.id} to={`/staff/events/${e.id}`} className="flex flex-wrap items-center gap-3 px-4 py-3 hover:bg-slate-50 dark:hover:bg-slate-800/50">
-          <div className="min-w-0 flex-1">
-            <div className="truncate font-semibold">{e.name}</div>
-            <div className="text-xs text-slate-500">
-              {formatDate(e.date, e.start_time)} · {[e.game, e.format].filter(Boolean).join(' · ')}
-            </div>
+    <div className="space-y-5">
+      <header className="flex items-center gap-3">
+        <h1 className="flex-1 text-2xl font-bold">Events</h1>
+        <button className="btn-secondary" onClick={() => setToolsOpen(true)}>
+          ☰ Tools
+        </button>
+      </header>
+
+      {showForm ? (
+        <div className="card mx-auto max-w-md space-y-3">
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg font-semibold">New event</h2>
+            {current.length > 0 && (
+              <button className="text-sm text-slate-500 underline" onClick={() => setCreating(false)}>
+                Cancel
+              </button>
+            )}
           </div>
-          <span className="text-sm tabular-nums text-slate-500">{e.registered} players</span>
-          <StatusPill status={e.status} />
-        </Link>
-      ))}
+          <NewEvent />
+        </div>
+      ) : (
+        <button className="btn-primary w-full py-3 text-base" onClick={() => setCreating(true)}>
+          + New event
+        </button>
+      )}
+
+      {current.length > 0 && (
+        <ul className="space-y-2">
+          {current.map((e) => (
+            <li key={e.id}>
+              <Link to={`/staff/events/${e.id}`} className="card flex flex-wrap items-center gap-3 transition hover:border-indigo-400">
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-lg font-semibold">{e.name}</div>
+                  <div className="text-sm text-slate-500">
+                    {formatDate(e.date, e.start_time)} · {e.registered} player{e.registered === 1 ? '' : 's'}
+                  </div>
+                </div>
+                <span className="text-sm font-semibold text-indigo-600 dark:text-indigo-400">
+                  {e.status === 'swiss' || e.status === 'topcut' ? 'Running →' : 'Check in →'}
+                </span>
+              </Link>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {past.length > 0 && (
+        <details className="card">
+          <summary className="cursor-pointer font-semibold">Past events ({past.length})</summary>
+          <ul className="mt-2 divide-y divide-slate-100 dark:divide-slate-800">
+            {past.map((e) => (
+              <li key={e.id}>
+                <Link to={`/staff/events/${e.id}`} className="flex items-center gap-3 py-2 text-sm hover:underline">
+                  <span className="flex-1">{e.name}</span>
+                  <span className="text-slate-500">{formatDate(e.date)}</span>
+                  <StatusPill status={e.status} />
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </details>
+      )}
+
+      <SideBar open={toolsOpen} onClose={() => setToolsOpen(false)}>
+        <ToolSection id="players" title="Players" hint="rename, PINs">
+          <PlayersTab />
+        </ToolSection>
+        <ToolSection id="pos" title="PayPal POS">
+          <PosSettings />
+        </ToolSection>
+        <ToolSection id="password" title="Staff password">
+          <PasswordSettings />
+        </ToolSection>
+      </SideBar>
     </div>
   );
 }
@@ -63,19 +108,18 @@ function NewEvent() {
   const navigate = useNavigate();
   const { busy, error, run } = useAction();
   return (
-    <div className="card space-y-3">
-      <EventForm
-        submitLabel="Create event"
+    <>
+      <QuickEventForm
         busy={busy}
         onSubmit={(v) =>
           run(async () => {
-            const { id } = await api<{ id: number }>('/api/events', v);
-            navigate(`/staff/events/${id}`);
+            const { id, posWarning } = await api<{ id: number; posWarning: string | null }>('/api/events', v);
+            navigate(`/staff/events/${id}`, { state: { posWarning } });
           })
         }
       />
       <ErrorNote error={error} />
-    </div>
+    </>
   );
 }
 
@@ -123,7 +167,7 @@ function PlayersTab() {
   };
 
   return (
-    <div className="card space-y-3">
+    <div className="space-y-3">
       <input className="input" placeholder="Search players…" value={q} onChange={(e) => setQ(e.target.value)} />
       <ErrorNote error={error} />
       {notice && <p className="text-sm text-emerald-600">{notice}</p>}
@@ -162,15 +206,6 @@ interface PosStatus {
   apiKeyUrl: string;
 }
 
-function SettingsTab() {
-  return (
-    <div className="grid gap-4 lg:grid-cols-2">
-      <PosSettings />
-      <PasswordSettings />
-    </div>
-  );
-}
-
 function PosSettings() {
   const [status, setStatus] = useState<PosStatus | null>(null);
   const [apiKey, setApiKey] = useState('');
@@ -184,9 +219,9 @@ function PosSettings() {
   if (!status) return null;
 
   return (
-    <div className="card space-y-3">
+    <div className="space-y-3">
       <div className="flex items-center justify-between gap-2">
-        <h3 className="font-semibold">PayPal POS</h3>
+        <h3 className="sr-only">PayPal POS</h3>
         <span
           className={`pill ${status.connected ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/50 dark:text-emerald-300' : 'bg-slate-200 text-slate-700 dark:bg-slate-800 dark:text-slate-300'}`}
         >
@@ -278,7 +313,7 @@ function PasswordSettings() {
   const { busy, error, run } = useAction();
   return (
     <form
-      className="card h-fit space-y-3"
+      className="space-y-3"
       onSubmit={(e) => {
         e.preventDefault();
         run(async () => {

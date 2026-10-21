@@ -81,14 +81,21 @@ export function authRoutes(app: FastifyInstance, db: DB) {
    * Log in by name. Players without a PIN are let straight in; players with one get
    * `{ needsPin: true }` until they send it.
    */
-  app.post<{ Body: { name: string; pin?: string } }>('/api/auth/player/login', async (req, reply) => {
+  app.post<{ Body: { name: string; pin?: string; createIfMissing?: boolean } }>('/api/auth/player/login', async (req, reply) => {
     const name = String(req.body?.name ?? '').trim();
     const pin = String(req.body?.pin ?? '');
     const key = `player:${name.toLowerCase()}`;
     const row = db.prepare('SELECT id, pin_hash FROM players WHERE name = ?').get(name) as
       | { id: number; pin_hash: string | null }
       | undefined;
-    if (!row) throw new HttpError(404, `No player named “${name}” yet — create a profile instead`);
+    if (!row) {
+      if (!req.body?.createIfMissing) throw new HttpError(404, `No player named “${name}” yet — create a profile instead`);
+      // One-step sign-in: a new name simply becomes a new player.
+      if (name.length < 2 || name.length > 40) throw new HttpError(400, 'Name must be 2–40 characters');
+      const newId = Number(db.prepare('INSERT INTO players (name) VALUES (?)').run(name).lastInsertRowid);
+      createSession(db, reply, 'player', newId);
+      return { ok: true, playerId: newId, created: true };
+    }
     if (row.pin_hash) {
       if (!pin) return { ok: false, needsPin: true };
       assertNotLocked(key);

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { bracketOrder, matchWinner, nextTopCutRound, seedTopCut } from '../server/engine/topcut.js';
+import { autoTopCut, bracketOrder, matchWinner, nextTopCutRound, seedTopCut } from '../server/engine/topcut.js';
 import * as timer from '../server/engine/timer.js';
 
 describe('top cut', () => {
@@ -40,6 +40,10 @@ describe('top cut', () => {
     round = nextTopCutRound(winners);
     expect(round).toEqual([{ p1: 1, p2: 7 }]);
     expect(nextTopCutRound(play(round))).toEqual([]);
+  });
+
+  it('sizes the top cut from attendance so small events still get a playoff', () => {
+    expect([2, 5, 6, 15, 16, 40].map(autoTopCut)).toEqual([2, 2, 4, 4, 8, 8]);
   });
 
   it('rejects draws in elimination rounds', () => {

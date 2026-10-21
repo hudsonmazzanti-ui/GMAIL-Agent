@@ -45,15 +45,23 @@ describe('full event through the API', () => {
     await c.post(`/api/matches/${match.id}/result`, { p1Games: 2, p2Games: 0 }, 403); // not their match
     const [mine, theirs] = match.p1.id === pa.playerId ? [a, b] : [b, a];
     await mine.post(`/api/matches/${match.id}/result`, { p1Games: 3, p2Games: 0 }, 400); // bo3 max 2 wins
-    await mine.post(`/api/matches/${match.id}/result`, { p1Games: 2, p2Games: 1 });
-    await mine.post(`/api/matches/${match.id}/respond`, { accept: true }, 400); // can't confirm own report
-    await staff.post(`/api/events/${id}/advance`, {}, 400); // unconfirmed result
-    await theirs.post(`/api/matches/${match.id}/respond`, { accept: false });
+    // One player's report counts immediately; they can still correct it.
+    await mine.post(`/api/matches/${match.id}/result`, { p1Games: 2, p2Games: 0 });
     let m = (await staff.get(`/api/events/${id}/state`)).rounds[0].matches[0];
+    expect(m).toMatchObject({ resultStatus: 'confirmed', p1Games: 2, p2Games: 0 });
+    await mine.post(`/api/matches/${match.id}/result`, { p1Games: 2, p2Games: 1 });
+    await mine.post(`/api/matches/${match.id}/respond`, { accept: false }, 400); // can't flag your own report
+    await theirs.post(`/api/matches/${match.id}/result`, { p1Games: 0, p2Games: 2 }, 400); // already reported: flag it instead
+    // The opponent flags it: staff must fix it before the next round.
+    await theirs.post(`/api/matches/${match.id}/respond`, { accept: false });
+    m = (await staff.get(`/api/events/${id}/state`)).rounds[0].matches[0];
     expect(m.resultStatus).toBe('disputed');
+    await mine.post(`/api/matches/${match.id}/result`, { p1Games: 2, p2Games: 0 }, 400); // staff are checking
+    await staff.post(`/api/events/${id}/advance`, {}, 400);
     await staff.post(`/api/matches/${match.id}/result`, { p1Games: 1, p2Games: 2 });
     m = (await staff.get(`/api/events/${id}/state`)).rounds[0].matches[0];
     expect(m).toMatchObject({ resultStatus: 'confirmed', p1Games: 1, p2Games: 2 });
+    await theirs.post(`/api/matches/${match.id}/respond`, { accept: false }, 400); // staff results can't be flagged
     await staff.post(`/api/events/${id}/advance`);
   });
 
@@ -116,6 +124,8 @@ describe('full event through the API', () => {
     const { event } = await staff.get(`/api/events/${id}/state`);
     expect(event.join_code).toMatch(/^[A-HJKMNP-Z2-9]{6}$/);
 
+    expect(event.status).toBe('registration'); // new events open straight away
+    await staff.post(`/api/events/${id}/status`, { status: 'draft' });
     const player = new Client(app);
     // Drafts are hidden from players; staff can still look them up.
     await player.call('GET', `/api/join/${event.join_code}`, undefined, 404);
@@ -126,6 +136,44 @@ describe('full event through the API', () => {
     expect(await player.get(`/api/join/${typed}`)).toEqual({ eventId: id, name: 'Code night', status: 'registration' });
     await player.call('GET', '/api/join/ZZZZZZ', undefined, 404);
     expect((await player.get('/api/server-info')).publicUrls).toEqual([]);
+  });
+
+  it('runs a small event start to finish with the defaults', async () => {
+    const staff = new Client(app);
+    await staff.post('/api/auth/staff/login', { password: 'secret123' });
+    const { id } = await staff.post('/api/events', { name: 'Five players', date: '2026-11-01', entryFeeCents: 500 });
+    const players: { id: number; c: Client }[] = [];
+    for (const name of ['Sm A', 'Sm B', 'Sm C', 'Sm D', 'Sm E']) {
+      const c = new Client(app);
+      // One field: typing a new name creates the player.
+      const r = await c.post('/api/auth/player/login', { name, createIfMissing: true });
+      expect(r.created).toBe(true);
+      await c.post(`/api/events/${id}/register`);
+      players.push({ id: r.playerId, c });
+    }
+    // Paying at the desk checks the player in.
+    for (const p of players) await staff.post(`/api/events/${id}/payments/manual`, { playerId: p.id, method: 'cash' });
+    let st = await staff.get(`/api/events/${id}/state`);
+    expect(st.counts.checkedIn).toBe(5);
+
+    await staff.post(`/api/events/${id}/advance`);
+    st = await staff.get(`/api/events/${id}/state`);
+    expect(st.event).toMatchObject({ status: 'swiss', top_cut_size: 2, best_of: 3, round_minutes: 50 });
+    // The clock starts as soon as the round is paired.
+    expect(st.rounds[0].status).toBe('active');
+    expect(st.rounds[0].timer.endsAt).toBeGreaterThan(Date.now());
+
+    const byId = new Map(players.map((p) => [p.id, p.c]));
+    for (let guard = 0; guard < 10 && st.event.status !== 'complete'; guard++) {
+      const round = st.rounds.at(-1);
+      for (const m of round.matches) if (m.p2) await byId.get(m.p1.id)!.post(`/api/matches/${m.id}/result`, { p1Games: 2, p2Games: 1 });
+      await staff.post(`/api/events/${id}/advance`);
+      st = await staff.get(`/api/events/${id}/state`);
+    }
+    expect(st.event.status).toBe('complete');
+    expect(st.rounds.filter((r: any) => r.phase === 'swiss')).toHaveLength(3);
+    expect(st.rounds.at(-1)).toMatchObject({ phase: 'topcut', label: 'Finals' });
+    expect(st.champion).toBeTruthy();
   });
 
   it('locks out PIN guessing', async () => {

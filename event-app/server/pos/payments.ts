@@ -18,6 +18,18 @@ function assertUnpaid(db: DB, eventId: number, playerId: number) {
   if (paidPayment(db, eventId, playerId)) throw bad('Player has already paid');
 }
 
+/**
+ * Paying at the desk means the player is here: check them in, unless the event already started
+ * (late payers are checked in by staff as usual).
+ */
+export function checkInAfterPayment(db: DB, eventId: number, playerId: number) {
+  db.prepare(
+    `UPDATE registrations SET status = 'checked_in'
+     WHERE event_id = ? AND player_id = ? AND status IN ('registered', 'waitlist')
+       AND (SELECT status FROM events WHERE id = ?) IN ('draft', 'registration', 'checkin')`,
+  ).run(eventId, playerId, eventId);
+}
+
 /** "Collect on POS": the next sale of this event's entry product is credited to this player. */
 export function collect(db: DB, eventId: number, playerId: number) {
   const ev = getEvent(db, eventId);
@@ -47,6 +59,7 @@ export function recordManual(db: DB, eventId: number, playerId: number, method: 
     ev.currency,
   );
   cancelCollect(db, eventId, playerId);
+  checkInAfterPayment(db, eventId, playerId);
 }
 
 /** Give an unassigned POS sale to a player (or move one between players). */
@@ -58,6 +71,7 @@ export function assign(db: DB, paymentId: number, playerId: number): number {
   if (p.player_id !== playerId) assertUnpaid(db, p.event_id, playerId);
   db.prepare('UPDATE payments SET player_id = ? WHERE id = ?').run(playerId, paymentId);
   cancelCollect(db, p.event_id, playerId);
+  if (p.status === 'paid') checkInAfterPayment(db, p.event_id, playerId);
   return p.event_id;
 }
 

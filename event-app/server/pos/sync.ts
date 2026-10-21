@@ -1,5 +1,6 @@
-import { getSetting, setSetting, type DB } from '../db/client.js';
+import { getSetting, setSetting, type DB, type EventRow } from '../db/client.js';
 import { PosClient, type PosPurchase, type PosUrls } from './client.js';
+import { checkInAfterPayment } from './payments.js';
 
 /** A sale matches a "Collect on POS" request made up to this long before it (plus clock slack after). */
 export const COLLECT_WINDOW_MS = 3 * 60_000;
@@ -81,7 +82,10 @@ export function applyPurchases(db: DB, purchases: PosPurchase[], now = Date.now(
             new Date(soldAt).toISOString(),
             p.userDisplayName ?? null,
           );
-          if (waiter) clearWaiter.run(ev.id, waiter.player_id);
+          if (waiter) {
+            clearWaiter.run(ev.id, waiter.player_id);
+            checkInAfterPayment(db, ev.id, waiter.player_id);
+          }
           changed.add(ev.id);
         }
       });
@@ -139,6 +143,33 @@ export class PosService {
     setSetting(this.db, 'pos_purchase_cursor', null);
     setSetting(this.db, 'pos_last_error', null);
     this.client = client;
+  }
+
+  /** Put an event's entry fee on the POS as a product, so staff can ring it up. */
+  async addEventProduct(eventId: number) {
+    const ev = this.db.prepare('SELECT * FROM events WHERE id = ?').get(eventId) as EventRow | undefined;
+    if (!ev) throw new Error('Event not found');
+    if (ev.pos_product_uuid || ev.entry_fee_cents <= 0) return;
+    const client = this.getClient();
+    if (!client) throw new Error('Connect PayPal POS first');
+    const { productUuid, variantUuid } = await client.createProduct({
+      name: `Entry · ${ev.name}${ev.date ? ` · ${ev.date}` : ''}`.slice(0, 120),
+      description: [ev.game, ev.format].filter(Boolean).join(' · ') || 'Event entry',
+      priceCents: ev.entry_fee_cents,
+      currency: ev.currency,
+    });
+    this.db.prepare('UPDATE events SET pos_product_uuid = ?, pos_variant_uuid = ? WHERE id = ?').run(productUuid, variantUuid, ev.id);
+  }
+
+  /** Paid events go on the POS automatically when it's connected; a POS hiccup never blocks the event. */
+  async autoAddEventProduct(eventId: number): Promise<string | null> {
+    if (!this.getClient()) return null;
+    try {
+      await this.addEventProduct(eventId);
+      return null;
+    } catch (e) {
+      return `Couldn't add the entry to PayPal POS: ${(e as Error).message}`;
+    }
   }
 
   disconnect() {

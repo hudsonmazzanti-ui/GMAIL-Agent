@@ -42,28 +42,61 @@ The seed script uses `STAFF_PASSWORD` if set. Run it on an empty database, or se
 
 ## Running an event
 
-1. **Staff → New event.** Set the game, format, match length, round time, capacity and top cut.
-2. **Open registration.** Players log in with just their name (no email or password) and tap **Register**. Anyone who wants to stop others from using their name can add a 4-digit PIN, either when signing up or later from their profile (tap their name in the header).
-3. **Show the QR code.** Every event gets a 6-character event code. Press **QR code** on the event's staff page and hold the screen up at the desk, or open the projector view, which shows a big QR while registration is open and a small one in the corner during rounds. Players scan it with their phone camera, or type the code under *Have an event code?* on the Events page, then log in with their name and tap **Join**.
-   The QR points at this computer's Wi-Fi address even if you opened the app as `localhost`. If the store uses a fixed name or address, set `PUBLIC_URL` (e.g. `PUBLIC_URL=http://events.local:3000 npm start`).
-4. **Check-in.** As players arrive, tap **Check in**. Walk-ins: type their name under *Add walk-in*.
-5. **Start event.** This pairs round 1. Press **Start round** to start the timer, then show `/display/<id>` on a TV.
-6. Players see their table on their phone, report the result and their opponent confirms. Disputes show up in red for a judge. **Enter / Edit** lets staff set any result.
-7. When every result is in, press **Pair round N**. After the last Swiss round the button becomes **Start top N**, and then **Finish event**.
+Each screen shows one step and one main button. Everything else is under **☰ Tools**, which you only open when something unusual happens.
 
-Players can drop from their phone. Staff can drop players, re-pair a round before it starts, add time, set, reset or remove PINs (*Staff → Players*), and fix earlier Swiss results while Swiss is still running.
+**Staff**
+
+1. **New event:** type a name, the date and the entry fee (leave the fee blank for a free event), then press **Create event**.
+   - The event takes sign-ups straight away.
+   - A paid event goes onto your PayPal POS by itself if the POS is connected.
+2. **Check in:**
+   - Players scan the QR code on the screen, or you type their name into *Add a player*.
+   - Each player gets one button:
+     - **Check in** for a free event.
+     - **Collect $X** with PayPal POS: ring the entry up on the POS and the player is checked in when the sale arrives.
+     - **Paid $X · Check in** without a POS.
+   - When everyone's here, press **Start event**.
+3. **Play:**
+   - Pairings go up and the round clock starts.
+   - Players report on their phones and the list fills in.
+   - A table only needs you if nobody reported (**Enter result**) or a player flagged the result (**Fix**).
+   - When every result is in, the main button moves on: **Start round 2**, …, **Start top 4**, **Finish event**.
+4. **Results:** the champion, the bracket and the final standings.
+
+**Players**
+1. Scan the QR code or open the event.
+2. Type their name and tap **Join**. There's no sign-up; a new name is a new profile.
+3. Their phone then shows their table, opponent and the clock, plus buttons like **I won 2-1** or **I lost 0-2**.
+4. One player's report counts right away. If it's wrong, the opponent taps **That's wrong** and staff fix it.
+
+**Defaults** (all changeable in *Tools → Event settings*):
+- Best of 3, 50-minute rounds.
+- The number of Swiss rounds comes from attendance.
+- The top cut always happens: a final under 6 players, a top 4 for 6–15, and a top 8 for 16 or more.
+
+**Tools** (the side bar):
+- **Timer:** pause and add time.
+- **Rounds:** re-pair, fix earlier results, print slips.
+- **Players:** drop, remove, late entries.
+- **Payments:** POS sales without a player, refunds, mark paid or comp, CSV.
+- **Projector & standings**, **Event settings**, and delete.
+- On the staff home: player PINs, the PayPal POS connection and the staff password.
+
+**QR codes:** the QR points at this computer's Wi-Fi address even if you opened the app as `localhost`. If the store uses a fixed name or address, set `PUBLIC_URL` (e.g. `PUBLIC_URL=http://events.local:3000 npm start`).
+
+**PINs:** players can add a 4-digit PIN from their profile (tap their name in the header) so nobody else can use their name.
 
 ## Entry fees with PayPal POS
 
 Nobody pays inside Event Hub. Entry fees are rung up on your **PayPal POS** (formerly Zettle) like any other item, and Event Hub reads the sales back to mark players paid.
 
 1. **Connect once.** Go to *Staff → Settings → PayPal POS* and click **Create an API key**. Do this while logged in to my.zettle.com as the account owner; the needed permissions (`READ:PURCHASE READ:PRODUCT WRITE:PRODUCT`) are pre-filled. Paste the key, then **Test & connect**. The key stays on the store computer and only sales made after connecting are imported.
-2. **Per event.** Set an *Entry fee* in the event settings, then use **Payments → Add to PayPal POS**. This creates an "Entry · <event> · <date>" product on the POS. Turn on *Require the entry fee to be paid before check-in* if you want check-in blocked for unpaid players.
+2. **Per event.** Give the event an entry fee and it is added to the POS as an "Entry · <event> · <date>" product automatically. If the POS wasn't connected yet, use *Tools → Payments → Add to PayPal POS*.
 3. **At the desk:**
-   - Press **Collect $X on POS** next to the player and ring the entry up on the POS. The next sale of that product, within 3 minutes, is credited to them automatically.
+   - Press **Collect $X** next to the player and ring the entry up on the POS. The next sale of that product, within 3 minutes, is credited to them and checks them in.
    - A sale of quantity 2 covers the next two waiting players.
-   - A sale rung up without pressing Collect appears under **Unassigned POS sales**, where you pick who paid.
-   - **Paid at desk** (cash or another terminal) and **Comp** work even when the internet is down.
+   - A sale rung up without pressing Collect shows an alert; *Tools → Payments* lets you pick who paid.
+   - *Tools → Payments* also has **Paid at desk** (cash or another terminal) and **Comp**, which work even when the internet is down.
 4. **Refunds** are done on the POS as usual. The next sync marks that player *Refunded*.
 5. **Payments CSV** lists every entry with its POS purchase number, for reconciling against PayPal POS reports.
 

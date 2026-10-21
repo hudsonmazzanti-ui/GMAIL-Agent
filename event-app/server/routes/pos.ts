@@ -53,17 +53,8 @@ export function posRoutes(app: FastifyInstance, db: DB, pos: PosService) {
     const ev = t.getEvent(db, id(req.params));
     if (ev.pos_product_uuid) throw new t.HttpError(400, 'This event is already on the POS');
     if (ev.entry_fee_cents <= 0) throw new t.HttpError(400, 'Set an entry fee first');
-    const client = pos.getClient();
-    if (!client) throw new t.HttpError(400, 'Connect PayPal POS in Staff → Settings first');
-    const { productUuid, variantUuid } = await posCall(() =>
-      client.createProduct({
-        name: `Entry · ${ev.name}${ev.date ? ` · ${ev.date}` : ''}`.slice(0, 120),
-        description: [ev.game, ev.format].filter(Boolean).join(' · ') || 'Event entry',
-        priceCents: ev.entry_fee_cents,
-        currency: ev.currency,
-      }),
-    );
-    db.prepare('UPDATE events SET pos_product_uuid = ?, pos_variant_uuid = ? WHERE id = ?').run(productUuid, variantUuid, ev.id);
+    if (!pos.getClient()) throw new t.HttpError(400, 'Connect PayPal POS in Staff → Settings first');
+    await posCall(() => pos.addEventProduct(ev.id));
     return changed(ev.id);
   });
 

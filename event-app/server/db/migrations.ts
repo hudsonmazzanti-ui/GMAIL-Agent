@@ -38,4 +38,6 @@ export const MIGRATIONS: string[] = [
   // 2: Event join codes, shown as a QR code for players to scan (see server/joinCode.ts).
   `ALTER TABLE events ADD COLUMN join_code TEXT;
    CREATE UNIQUE INDEX idx_events_join_code ON events(join_code);`,
+  // 3: Top cut sized from attendance at start (existing events keep their fixed size).
+  `ALTER TABLE events ADD COLUMN top_cut_auto INTEGER NOT NULL DEFAULT 0;`,
 ];

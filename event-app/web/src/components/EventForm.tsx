@@ -17,6 +17,7 @@ export interface EventFormValues {
   entryFeeCents: number;
   currency: string;
   requirePayment: boolean;
+  topCutAuto: boolean;
 }
 
 export const CURRENCIES = ['USD', 'CAD', 'GBP', 'EUR', 'AUD', 'NZD', 'SEK', 'NOK', 'DKK', 'CHF', 'MXN', 'BRL'];
@@ -37,6 +38,7 @@ export const fromRow = (e: EventRow): EventFormValues => ({
   entryFeeCents: e.entry_fee_cents,
   currency: e.currency,
   requirePayment: !!e.require_payment,
+  topCutAuto: !!e.top_cut_auto,
 });
 
 const EMPTY: EventFormValues = {
@@ -55,6 +57,7 @@ const EMPTY: EventFormValues = {
   entryFeeCents: 0,
   currency: 'USD',
   requirePayment: false,
+  topCutAuto: true,
 };
 
 export function EventForm({
@@ -85,8 +88,8 @@ export function EventForm({
   };
 
   return (
-    <form onSubmit={submit} className="grid gap-4 sm:grid-cols-2">
-      <label className="sm:col-span-2">
+    <form onSubmit={submit} className="grid gap-3">
+      <label>
         <span className="label">Event name</span>
         <input className="input" required value={v.name} onChange={(e) => set('name', e.target.value)} placeholder="Friday Night Constructed" />
       </label>
@@ -136,10 +139,6 @@ export function EventForm({
           </select>
         </label>
       </div>
-      <label className="flex items-center gap-2 self-end pb-2 text-sm">
-        <input type="checkbox" checked={v.requirePayment} onChange={(e) => set('requirePayment', e.target.checked)} />
-        Require the entry fee to be paid before check-in
-      </label>
       <label>
         <span className="label">Match length</span>
         <select className="input" disabled={started} value={v.bestOf} onChange={(e) => set('bestOf', Number(e.target.value))}>
@@ -165,7 +164,14 @@ export function EventForm({
       </label>
       <label>
         <span className="label">Top cut</span>
-        <select className="input" value={v.topCutSize} onChange={(e) => set('topCutSize', Number(e.target.value))}>
+        <select
+          className="input"
+          value={v.topCutAuto ? 'auto' : v.topCutSize}
+          onChange={(e) =>
+            setV(e.target.value === 'auto' ? { ...v, topCutAuto: true } : { ...v, topCutAuto: false, topCutSize: Number(e.target.value) })
+          }
+        >
+          <option value="auto">Automatic (top 2 / 4 / 8 by attendance)</option>
           <option value={0}>None (Swiss only)</option>
           <option value={2}>Top 2</option>
           <option value={4}>Top 4</option>
@@ -174,15 +180,49 @@ export function EventForm({
           <option value={32}>Top 32</option>
         </select>
       </label>
-      <label className="sm:col-span-2">
+      <label>
         <span className="label">Description</span>
         <textarea className="input min-h-20" value={v.description} onChange={(e) => set('description', e.target.value)} />
       </label>
-      <div className="sm:col-span-2">
+      <div>
         <button className="btn-primary" disabled={busy}>
           {submitLabel}
         </button>
       </div>
+    </form>
+  );
+}
+
+/** The only three things staff fill in to create an event; everything else has a default. */
+export function QuickEventForm({ busy, onSubmit }: { busy?: boolean; onSubmit: (v: Partial<EventFormValues>) => void }) {
+  const [name, setName] = useState('');
+  const [date, setDate] = useState(EMPTY.date);
+  const [fee, setFee] = useState('');
+  return (
+    <form
+      className="space-y-4"
+      onSubmit={(e) => {
+        e.preventDefault();
+        onSubmit({ name, date, startTime: EMPTY.startTime, entryFeeCents: Math.round(Number(fee || 0) * 100) });
+      }}
+    >
+      <label className="block">
+        <span className="label">Event name</span>
+        <input id="new-event-name" className="input text-base" required autoFocus value={name} onChange={(e) => setName(e.target.value)} placeholder="Friday Night Magic" />
+      </label>
+      <div className="grid grid-cols-2 gap-3">
+        <label className="block">
+          <span className="label">Date</span>
+          <input id="new-event-date" className="input" type="date" required value={date} onChange={(e) => setDate(e.target.value)} />
+        </label>
+        <label className="block">
+          <span className="label">Entry fee</span>
+          <input id="new-event-fee" className="input" type="number" min={0} step="0.01" inputMode="decimal" placeholder="Free" value={fee} onChange={(e) => setFee(e.target.value)} />
+        </label>
+      </div>
+      <button className="btn-primary w-full py-3 text-base" disabled={busy || !name.trim()}>
+        Create event
+      </button>
     </form>
   );
 }

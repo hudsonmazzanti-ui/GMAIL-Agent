@@ -129,9 +129,9 @@ describe('end to end against the fake PayPal POS', async () => {
     expect(status.connected).toBe(true);
 
     const { id } = await staff.post('/api/events', { name: 'Paid event', entryFeeCents: 1500, currency: 'USD', requirePayment: true });
-    await staff.post(`/api/events/${id}/status`, { status: 'registration' });
-    await staff.post(`/api/events/${id}/pos/product`);
+    // A paid event goes on the POS by itself when the POS is connected.
     expect(fake.products.size).toBe(1);
+    await staff.post(`/api/events/${id}/pos/product`, {}, 400); // already there
     const product = [...fake.products.values()][0];
     expect(product.variants[0].price).toEqual({ amount: 1500, currencyId: 'USD' });
     await staff.call('PATCH', `/api/events/${id}`, { entryFeeCents: 2000 }, 400); // price locked while linked
@@ -152,7 +152,7 @@ describe('end to end against the fake PayPal POS', async () => {
     const reg = st.registrations.find((r: any) => r.playerId === me.playerId);
     expect(reg.payment).toMatchObject({ method: 'pos', status: 'paid', amountCents: 1500, posNumber: '1001' });
     expect(st.payments).toMatchObject({ paidCount: 1, owing: 0, totals: { pos: 1500 } });
-    await staff.post(`/api/events/${id}/checkin`, { playerId: me.playerId, checkedIn: true });
+    expect(reg).toMatchObject({ status: 'checked_in' }); // paying at the desk checks you in
 
     // Players only see their own payment, and never the tray.
     const mine = await p.get(`/api/events/${id}/state`);

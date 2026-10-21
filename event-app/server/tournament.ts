@@ -2,7 +2,7 @@ import crypto from 'node:crypto';
 import type { DB, EventRow, MatchRow, RegistrationStatus, RoundRow } from './db/client.js';
 import { computeStandings, type StandingRow } from './engine/standings.js';
 import { pairSwissRound, recommendedRounds } from './engine/swiss.js';
-import { matchWinner, nextTopCutRound, seedTopCut } from './engine/topcut.js';
+import { autoTopCut, matchWinner, nextTopCutRound, seedTopCut } from './engine/topcut.js';
 import * as timer from './engine/timer.js';
 import { paidPayment, paymentState } from './pos/payments.js';
 import { makeRng, type MatchResult, type Pairing } from './engine/types.js';
@@ -84,11 +84,15 @@ export function standings(db: DB, eventId: number): StandingRow[] {
   return computeStandings(players, swissResults(db, eventId), { win: ev.win_points, draw: ev.draw_points });
 }
 
+/** A new round starts right away: the clock runs from the moment pairings go up. */
 function insertRound(db: DB, ev: EventRow, phase: 'swiss' | 'topcut', number: number, pairings: Pairing[]) {
+  const durationMs = ev.round_minutes * 60_000;
   const roundId = Number(
     db
-      .prepare('INSERT INTO rounds (event_id, phase, number, timer_remaining_ms) VALUES (?, ?, ?, ?)')
-      .run(ev.id, phase, number, ev.round_minutes * 60_000).lastInsertRowid,
+      .prepare(
+        "INSERT INTO rounds (event_id, phase, number, status, timer_ends_at, timer_remaining_ms) VALUES (?, ?, ?, 'active', ?, ?)",
+      )
+      .run(ev.id, phase, number, Date.now() + durationMs, durationMs).lastInsertRowid,
   );
   insertMatches(db, ev, roundId, pairings);
   return roundId;
@@ -139,7 +143,8 @@ export function advance(db: DB, eventId: number): void {
       ).n;
       if (count < 2) throw bad('Check in at least 2 players before starting');
       const swissRounds = ev.swiss_rounds ?? recommendedRounds(count);
-      db.prepare("UPDATE events SET status = 'swiss', swiss_rounds = ? WHERE id = ?").run(swissRounds, eventId);
+      const topCut = ev.top_cut_auto ? autoTopCut(count) : ev.top_cut_size;
+      db.prepare("UPDATE events SET status = 'swiss', swiss_rounds = ?, top_cut_size = ? WHERE id = ?").run(swissRounds, topCut, eventId);
       const started = getEvent(db, eventId);
       insertRound(db, started, 'swiss', 1, pairSwiss(db, started));
       return;
@@ -183,19 +188,23 @@ export function advance(db: DB, eventId: number): void {
   })();
 }
 
-/** Throw away and redo the pairings of a Swiss round that hasn't started yet. */
+/** Throw away and redo the pairings of the current Swiss round, as long as no results are in. The clock restarts. */
 export function repairRound(db: DB, roundId: number): number {
   return db.transaction(() => {
     const round = db.prepare('SELECT * FROM rounds WHERE id = ?').get(roundId) as RoundRow | undefined;
     if (!round) throw new HttpError(404, 'Round not found');
     const latest = currentRound(db, round.event_id);
     if (round.phase !== 'swiss' || latest?.id !== round.id) throw bad('Only the current Swiss round can be re-paired');
-    if (round.status !== 'pending' || round.timer_ends_at !== null) throw bad('Round already started');
     const reported = matchesForRound(db, roundId).some((m) => m.p2_id !== null && m.result_status !== 'pending');
     if (reported) throw bad('Results already reported for this round');
     const ev = getEvent(db, round.event_id);
     db.prepare('DELETE FROM matches WHERE round_id = ?').run(roundId);
     insertMatches(db, ev, roundId, pairSwiss(db, ev, roundId));
+    db.prepare("UPDATE rounds SET status = 'active', timer_ends_at = ?, timer_remaining_ms = ? WHERE id = ?").run(
+      Date.now() + ev.round_minutes * 60_000,
+      ev.round_minutes * 60_000,
+      roundId,
+    );
     return round.event_id;
   })();
 }
@@ -267,38 +276,45 @@ export function staffSetResult(db: DB, matchId: number, input: ResultInput): num
   return ev.id;
 }
 
+/**
+ * A player reports their match and it counts straight away. They can correct their own report
+ * while the round runs; if their opponent already reported, they flag it instead (playerRespond).
+ */
 export function playerReport(db: DB, matchId: number, playerId: number, input: ResultInput): number {
   const { m, round, ev } = loadMatch(db, matchId);
   if (m.p1_id !== playerId && m.p2_id !== playerId) throw new HttpError(403, 'Not your match');
   if (m.p2_id === null) throw bad('Byes have no result to report');
   assertEditable(db, round, ev, false);
-  if (m.result_status === 'confirmed') throw bad('Result already confirmed — ask a judge to change it');
+  if (m.result_status === 'disputed') throw bad('Staff are checking this result');
+  if (m.result_status !== 'pending' && m.reported_by !== playerId) {
+    throw bad("Your opponent already reported this match — tap “That's wrong” if it isn't right");
+  }
   const r = validateResult(ev, round, input);
-  const sameAsOpponent =
-    m.result_status === 'reported' &&
-    m.reported_by !== playerId &&
-    m.p1_games === r.p1Games &&
-    m.p2_games === r.p2Games &&
-    m.draws === r.draws;
-  db.prepare('UPDATE matches SET p1_games = ?, p2_games = ?, draws = ?, result_status = ?, reported_by = ? WHERE id = ?').run(
+  db.prepare("UPDATE matches SET p1_games = ?, p2_games = ?, draws = ?, result_status = 'confirmed', reported_by = ? WHERE id = ?").run(
     r.p1Games,
     r.p2Games,
     r.draws,
-    sameAsOpponent ? 'confirmed' : 'reported',
     playerId,
     matchId,
   );
-  if (round.status === 'pending') db.prepare("UPDATE rounds SET status = 'active' WHERE id = ?").run(round.id);
   return ev.id;
 }
 
+/**
+ * The opponent's answer to a reported result. "That's wrong" (accept = false) flags it for
+ * staff and holds up the next round until they fix it. Results staff entered can't be flagged.
+ */
 export function playerRespond(db: DB, matchId: number, playerId: number, accept: boolean): number {
   const { m, round, ev } = loadMatch(db, matchId);
   if (m.p1_id !== playerId && m.p2_id !== playerId) throw new HttpError(403, 'Not your match');
   assertEditable(db, round, ev, false);
-  if (m.result_status !== 'reported') throw bad('Nothing to confirm');
-  if (m.reported_by === playerId) throw bad('Your opponent needs to confirm this result');
-  db.prepare('UPDATE matches SET result_status = ? WHERE id = ?').run(accept ? 'confirmed' : 'disputed', matchId);
+  if (m.reported_by === null || m.result_status === 'pending') throw bad('Nothing to answer yet');
+  if (m.reported_by === playerId) throw bad('You reported this result');
+  if (accept) {
+    if (m.result_status === 'reported') db.prepare("UPDATE matches SET result_status = 'confirmed' WHERE id = ?").run(matchId);
+    return ev.id;
+  }
+  db.prepare("UPDATE matches SET result_status = 'disputed' WHERE id = ?").run(matchId);
   return ev.id;
 }
 

@@ -25,7 +25,7 @@ interface Route {
 const FAKE_POS_BASE = 'http://fake-pos';
 export const DEMO_STORE_URL = 'http://192.168.1.20:3000';
 // Bump when the seed changes so returning visitors get the new sample data.
-const STORE_KEY = 'event-hub-demo-v2';
+const STORE_KEY = 'event-hub-demo-v3';
 
 export class DemoBackend {
   private routes: Route[] = [];
@@ -51,7 +51,7 @@ export class DemoBackend {
     app.get('/api/server-info', async () => ({ publicUrls: [DEMO_STORE_URL], configured: true }));
     authRoutes(app, sqlite);
     playerRoutes(app, sqlite);
-    eventRoutes(app, sqlite);
+    eventRoutes(app, sqlite, posService);
     playRoutes(app, sqlite);
     posRoutes(app, sqlite, posService);
     // The store install polls every 20 s; the demo checks every 3 s so sales show up quickly.

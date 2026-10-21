@@ -51,7 +51,7 @@ export async function buildApp(opts: AppOptions) {
   app.get('/api/server-info', async () => ({ publicUrls: opts.publicUrls ?? [], configured: !!opts.publicUrlConfigured }));
   authRoutes(app, db);
   playerRoutes(app, db);
-  eventRoutes(app, db);
+  eventRoutes(app, db, pos);
   playRoutes(app, db);
   posRoutes(app, db, pos);
 

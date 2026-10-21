@@ -50,3 +50,14 @@ export function matchWinner(m: { p1: number; p2: number | null; p1Games: number;
   if (m.p1Games === m.p2Games) throw new Error('Top cut matches need a winner');
   return m.p1Games > m.p2Games ? m.p1 : m.p2;
 }
+
+/**
+ * Top cut size picked from attendance, so every event ends in a playoff:
+ * under 6 players a final (top 2), 6–15 a top 4, 16 or more a top 8.
+ */
+export function autoTopCut(playerCount: number): number {
+  if (playerCount < 2) return 0;
+  if (playerCount < 6) return 2;
+  if (playerCount < 16) return 4;
+  return 8;
+}

@@ -3,6 +3,7 @@ import type { DB, EventRow } from '../db/client.js';
 import { requirePlayer, requireStaff } from '../auth.js';
 import { broadcast, subscribe } from '../live.js';
 import { assignJoinCode, normalizeJoinCode } from '../joinCode.js';
+import type { PosService } from '../pos/sync.js';
 import * as t from '../tournament.js';
 
 export type EventBody = Partial<{
@@ -23,6 +24,7 @@ export type EventBody = Partial<{
   entryFeeCents: number;
   currency: string;
   requirePayment: boolean;
+  topCutAuto: boolean;
 }>;
 
 const COLUMNS: Record<keyof EventBody, keyof EventRow> = {
@@ -43,6 +45,7 @@ const COLUMNS: Record<keyof EventBody, keyof EventRow> = {
   entryFeeCents: 'entry_fee_cents',
   currency: 'currency',
   requirePayment: 'require_payment',
+  topCutAuto: 'top_cut_auto',
 };
 
 /** Settings that change how pairings/results work are locked once the event starts. */
@@ -54,7 +57,7 @@ const STATUS_FLOW: Record<string, string[]> = {
   checkin: ['registration'],
 };
 
-export function eventRoutes(app: FastifyInstance, db: DB) {
+export function eventRoutes(app: FastifyInstance, db: DB, pos?: PosService) {
   const id = (p: { id: string }) => Number(p.id);
   const changed = (eventId: number) => {
     broadcast(eventId);
@@ -63,13 +66,16 @@ export function eventRoutes(app: FastifyInstance, db: DB) {
 
   app.get('/api/events', async (req) => {
     const staff = req.viewer.kind === 'staff';
+    // `joined` marks the events the logged-in player is in, so their page can put them first.
+    const playerId = req.viewer.kind === 'player' ? req.viewer.playerId : -1;
     return db
       .prepare(
-        `SELECT e.*, (SELECT COUNT(*) FROM registrations r WHERE r.event_id = e.id AND r.status != 'waitlist') AS registered
+        `SELECT e.*, (SELECT COUNT(*) FROM registrations r WHERE r.event_id = e.id AND r.status != 'waitlist') AS registered,
+           EXISTS (SELECT 1 FROM registrations r WHERE r.event_id = e.id AND r.player_id = ? AND r.status != 'dropped') AS joined
          FROM events e ${staff ? '' : "WHERE e.status != 'draft'"}
          ORDER BY CASE WHEN e.status = 'complete' THEN 1 ELSE 0 END, e.date, e.start_time, e.id`,
       )
-      .all();
+      .all(playerId);
   });
 
   app.get('/api/live', async (req, reply) => {
@@ -81,16 +87,24 @@ export function eventRoutes(app: FastifyInstance, db: DB) {
     requireStaff(req);
     const name = req.body?.name?.trim();
     if (!name) throw new t.HttpError(400, 'Event name is required');
-    const newId = Number(db.prepare('INSERT INTO events (name) VALUES (?)').run(name).lastInsertRowid);
+    // New events take sign-ups straight away and size their top cut from attendance.
+    const newId = Number(
+      db.prepare("INSERT INTO events (name, status, top_cut_auto) VALUES (?, 'registration', 1)").run(name).lastInsertRowid,
+    );
     assignJoinCode(db, newId);
     updateEvent(db, newId, req.body);
-    return { id: newId };
+    const posWarning = (await pos?.autoAddEventProduct(newId)) ?? null;
+    broadcast(newId);
+    return { id: newId, posWarning };
   });
 
   app.patch<{ Params: { id: string }; Body: EventBody }>('/api/events/:id', async (req) => {
     requireStaff(req);
     updateEvent(db, id(req.params), req.body ?? {});
-    return changed(id(req.params));
+    const ev = t.getEvent(db, id(req.params));
+    const posWarning = ev.status !== 'complete' ? ((await pos?.autoAddEventProduct(ev.id)) ?? null) : null;
+    broadcast(ev.id);
+    return { ok: true, posWarning };
   });
 
   app.delete<{ Params: { id: string } }>('/api/events/:id', async (req) => {
@@ -102,6 +116,7 @@ export function eventRoutes(app: FastifyInstance, db: DB) {
   app.post<{ Params: { id: string }; Body: { status: string } }>('/api/events/:id/status', async (req) => {
     requireStaff(req);
     const ev = t.getEvent(db, id(req.params));
+    if (req.body?.status === ev.status) return { ok: true };
     if (!STATUS_FLOW[ev.status]?.includes(req.body?.status)) {
       throw new t.HttpError(400, `Can't go from ${ev.status} to ${req.body?.status}`);
     }
@@ -181,7 +196,7 @@ export function updateEvent(db: DB, eventId: number, body: EventBody) {
     const column = COLUMNS[key];
     if (!column || value === undefined) continue;
     const normalized =
-      key === 'requirePayment' ? (value ? 1 : 0) : value === '' && (key === 'capacity' || key === 'swissRounds') ? null : value;
+      key === 'requirePayment' || key === 'topCutAuto' ? (value ? 1 : 0) : value === '' && (key === 'capacity' || key === 'swissRounds') ? null : value;
     if (normalized === ev[column]) continue;
     if (started && LOCKED_AFTER_START.has(key)) {
       throw new t.HttpError(400, `${key} can't change after the event starts`);
@@ -191,6 +206,7 @@ export function updateEvent(db: DB, eventId: number, body: EventBody) {
       if (ev.status !== 'swiss' || typeof normalized !== 'number' || normalized < played) throw new t.HttpError(400, `Swiss rounds can't go below ${played}`);
     }
     if (key === 'topCutSize' && ev.status !== 'swiss' && started) throw new t.HttpError(400, 'Top cut is already decided');
+    if (key === 'topCutSize' && body.topCutAuto === undefined) db.prepare('UPDATE events SET top_cut_auto = 0 WHERE id = ?').run(eventId);
     if ((key === 'entryFeeCents' || key === 'currency') && ev.pos_product_uuid) {
       throw new t.HttpError(400, 'The fee is linked to a POS product — unlink it from the POS first to change the price');
     }

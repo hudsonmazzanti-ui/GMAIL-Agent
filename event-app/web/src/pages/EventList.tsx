@@ -14,33 +14,38 @@ export function EventList() {
   useLive('/api/live', load);
 
   if (!events) return null;
-  const live = events.filter((e) => e.status === 'swiss' || e.status === 'topcut');
-  const upcoming = events.filter((e) => ['draft', 'registration', 'checkin'].includes(e.status));
+  const active = events.filter((e) => e.status !== 'complete');
+  const mine = active.filter((e) => e.joined);
+  const others = active.filter((e) => !e.joined);
   const past = events.filter((e) => e.status === 'complete');
 
   return (
-    <div className="space-y-8">
-      {viewer.kind === 'anon' && (
-        <div className="card flex flex-wrap items-center justify-between gap-3 bg-indigo-50 dark:bg-indigo-950/40">
-          <p className="text-sm">Log in with your name to register and see your pairings.</p>
-          <Link to="/login" className="btn-primary btn-sm">
-            Log in / Sign up
-          </Link>
-        </div>
-      )}
+    <div className="mx-auto max-w-2xl space-y-6">
+      {mine.length > 0 && <Section title="Your event" events={mine} highlight />}
       <CodeEntry />
-      <Section title="Happening now" events={live} />
-      <Section title="Upcoming" events={upcoming} empty="No upcoming events yet." />
-      <Section title="Past events" events={past} />
+      {viewer.kind === 'anon' && (
+        <p className="text-center text-sm text-slate-500">
+          Playing tonight? Scan the QR code at the desk, enter the event code, or pick an event below.
+        </p>
+      )}
+      <Section title={mine.length ? 'Other events' : 'Events'} events={others} empty="No events coming up yet." />
+      {past.length > 0 && (
+        <details>
+          <summary className="cursor-pointer text-sm font-semibold text-slate-500">Past events ({past.length})</summary>
+          <div className="mt-3">
+            <Section title="" events={past} />
+          </div>
+        </details>
+      )}
     </div>
   );
 }
 
-function Section({ title, events, empty }: { title: string; events: EventListItem[]; empty?: string }) {
+function Section({ title, events, empty, highlight }: { title: string; events: EventListItem[]; empty?: string; highlight?: boolean }) {
   if (!events.length && !empty) return null;
   return (
     <section>
-      <h2 className="mb-3 text-lg font-bold">{title}</h2>
+      {title && <h2 className="mb-3 text-lg font-bold">{title}</h2>}
       {events.length === 0 ? (
         <div className="card">
           <Empty>{empty}</Empty>
@@ -48,14 +53,15 @@ function Section({ title, events, empty }: { title: string; events: EventListIte
       ) : (
         <div className="grid gap-3 sm:grid-cols-2">
           {events.map((e) => (
-            <Link key={e.id} to={`/events/${e.id}`} className="card block transition hover:border-indigo-400">
+            <Link
+              key={e.id}
+              to={`/events/${e.id}`}
+              className={`card block transition hover:border-indigo-400 ${highlight ? 'border-indigo-400 ring-2 ring-indigo-200 dark:ring-indigo-900' : ''}`}
+            >
               <div className="flex items-start justify-between gap-2">
                 <h3 className="font-semibold">{e.name}</h3>
                 <StatusPill status={e.status} />
               </div>
-              <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-                {[e.game, e.format].filter(Boolean).join(' · ') || 'TCG event'}
-              </p>
               <p className="mt-2 flex justify-between text-sm">
                 <span>{formatDate(e.date, e.start_time)}</span>
                 <span className="text-slate-500 dark:text-slate-400">

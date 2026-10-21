@@ -40,7 +40,6 @@ export async function seedDemo(b: DemoBackend) {
 
   async function makeEvent(body: Record<string, unknown>, who: { id: number; token: string }[]) {
     const { id } = await staff('POST', '/api/events', body);
-    await staff('POST', `/api/events/${id}/status`, { status: 'registration' });
     for (const p of who) await call(p.token, 'POST', `/api/events/${id}/register`);
     return id as number;
   }
@@ -65,7 +64,7 @@ export async function seedDemo(b: DemoBackend) {
 
   // 2. Tonight's draft league, in round 2 with results coming in.
   const draft = await makeEvent(
-    { name: 'Thursday Draft League', game: 'Any TCG', format: 'Booster Draft', date: day(0), startTime: '19:00', topCutSize: 0, bestOf: 3, roundMinutes: 50 },
+    { name: 'Thursday Draft League', game: 'Any TCG', format: 'Booster Draft', date: day(0), startTime: '19:00' },
     players.slice(2, 11),
   );
   for (const p of players.slice(2, 11)) await staff('POST', `/api/events/${draft}/checkin`, { playerId: p.id, checkedIn: true });
@@ -78,11 +77,8 @@ export async function seedDemo(b: DemoBackend) {
   await staff('POST', `/api/rounds/${r2.id}/timer`, { action: 'start' });
   await staff('POST', `/api/rounds/${r2.id}/timer`, { action: 'add', minutes: -18 });
   const real = r2.matches.filter((m: any) => m.p2);
-  // Table 1: confirmed by both players. Table 2: reported, waiting for the opponent. Table 3: disputed.
-  if (real[0]) {
-    await call(tokenOf.get(real[0].p1.id)!, 'POST', `/api/matches/${real[0].id}/result`, { p1Games: 2, p2Games: 1, draws: 0 });
-    await call(tokenOf.get(real[0].p2.id)!, 'POST', `/api/matches/${real[0].id}/respond`, { accept: true });
-  }
+  // Tables 1-2: reported by a player. Table 3: flagged by the opponent. Table 4: not in yet.
+  if (real[0]) await call(tokenOf.get(real[0].p1.id)!, 'POST', `/api/matches/${real[0].id}/result`, { p1Games: 2, p2Games: 1, draws: 0 });
   if (real[1]) await call(tokenOf.get(real[1].p2.id)!, 'POST', `/api/matches/${real[1].id}/result`, { p1Games: 0, p2Games: 2, draws: 0 });
   if (real[2]) {
     await call(tokenOf.get(real[2].p1.id)!, 'POST', `/api/matches/${real[2].id}/result`, { p1Games: 2, p2Games: 0, draws: 0 });
@@ -99,14 +95,13 @@ export async function seedDemo(b: DemoBackend) {
       date: day(2),
       startTime: '12:00',
       capacity: 24,
-      topCutSize: 4,
       entryFeeCents: 2500,
       currency: 'USD',
       entryFeeNote: 'Packs to top 4',
     },
     players.slice(0, 7),
   );
-  await staff('POST', `/api/events/${sealed}/pos/product`);
+  // Created with a fee while the POS is connected, so the entry is already on the POS.
   const product = [...b.pos.products.values()].at(-1)!;
   await staff('POST', `/api/events/${sealed}/payments/collect`, { playerId: players[0].id });
   b.pos.sale([{ productUuid: product.uuid }]);
@@ -114,7 +109,6 @@ export async function seedDemo(b: DemoBackend) {
   await staff('POST', `/api/events/${sealed}/payments/manual`, { playerId: players[1].id, method: 'cash' });
   b.pos.sale([{ productUuid: product.uuid }], 'Sam (register 2)'); // rung up without pressing Collect
   await staff('POST', '/api/pos/sync');
-  await staff('POST', `/api/events/${sealed}/checkin`, { playerId: players[0].id, checkedIn: true });
 
   return { staffToken, events: { fnm, draft, sealed } };
 }
