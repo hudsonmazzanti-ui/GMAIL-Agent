@@ -82,7 +82,10 @@ For a real check, ring up one entry on your POS, refund it, and confirm both sho
 npm run dev        # API with reload on :3000 + Vite on :5173 (proxying /api)
 npm test           # engine + full-event API tests
 npm run typecheck
+npm run build:demo # web/dist-demo/demo.html: the whole app in one file, running in the browser
 ```
+
+The demo build runs the real server routes in the page, with SQLite compiled to WebAssembly and the fake PayPal POS. It has a bar for switching between staff and players, and saves to the browser's local storage. It's handy for showing the app to staff without setting anything up.
 
 ```
 server/engine/        pure pairing, standings, top cut and timer logic (unit-tested)
