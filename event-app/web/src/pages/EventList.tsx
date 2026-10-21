@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { api, formatDate, type EventListItem } from '../api';
 import { Empty, StatusPill } from '../components/ui';
 import { useAuth, useLive } from '../hooks';
@@ -22,12 +22,13 @@ export function EventList() {
     <div className="space-y-8">
       {viewer.kind === 'anon' && (
         <div className="card flex flex-wrap items-center justify-between gap-3 bg-indigo-50 dark:bg-indigo-950/40">
-          <p className="text-sm">Log in with your name and PIN to register and see your pairings.</p>
+          <p className="text-sm">Log in with your name to register and see your pairings.</p>
           <Link to="/login" className="btn-primary btn-sm">
             Log in / Sign up
           </Link>
         </div>
       )}
+      <CodeEntry />
       <Section title="Happening now" events={live} />
       <Section title="Upcoming" events={upcoming} empty="No upcoming events yet." />
       <Section title="Past events" events={past} />
@@ -67,5 +68,38 @@ function Section({ title, events, empty }: { title: string; events: EventListIte
         </div>
       )}
     </section>
+  );
+}
+
+/** Type the code staff show (the same one in the QR code) to jump straight to an event. */
+function CodeEntry() {
+  const navigate = useNavigate();
+  const [code, setCode] = useState('');
+  const clean = code.toUpperCase().replace(/[^A-Z0-9]/g, '');
+  return (
+    <form
+      className="card flex flex-wrap items-end gap-3"
+      onSubmit={(e) => {
+        e.preventDefault();
+        if (clean.length === 6) navigate(`/join/${clean}`);
+      }}
+    >
+      <label className="min-w-0 flex-1">
+        <span className="label">Have an event code?</span>
+        <input
+          id="event-code"
+          className="input font-mono uppercase tracking-widest"
+          placeholder="ABC-234"
+          autoCapitalize="characters"
+          autoComplete="off"
+          maxLength={7}
+          value={code}
+          onChange={(e) => setCode(e.target.value)}
+        />
+      </label>
+      <button className="btn-primary" disabled={clean.length !== 6}>
+        Find event
+      </button>
+    </form>
   );
 }

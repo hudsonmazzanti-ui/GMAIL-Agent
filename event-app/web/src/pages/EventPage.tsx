@@ -8,6 +8,7 @@ import { PairingsTable, StandingsTable } from '../components/Tables';
 import { Empty, ErrorNote, StatusPill, Tabs } from '../components/ui';
 import { useAction, useAuth, useLiveEvent } from '../hooks';
 import { ask } from '../components/Dialog';
+import { formatJoinCode } from '../components/JoinQr';
 
 type Tab = 'pairings' | 'standings' | 'bracket' | 'players';
 
@@ -34,6 +35,11 @@ export function EventPage() {
         <div className="flex flex-wrap items-center gap-2">
           <h1 className="text-2xl font-bold">{ev.name}</h1>
           <StatusPill status={ev.status} />
+          {ev.join_code && (
+            <span className="pill bg-slate-200 font-mono text-slate-700 dark:bg-slate-800 dark:text-slate-300" title="Event code">
+              {formatJoinCode(ev.join_code)}
+            </span>
+          )}
           {viewer.kind === 'staff' && (
             <Link to={`/staff/events/${ev.id}`} className="btn-secondary btn-sm ml-auto">
               Manage

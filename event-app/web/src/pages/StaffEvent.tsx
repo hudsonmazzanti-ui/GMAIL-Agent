@@ -11,6 +11,8 @@ import { Empty, ErrorNote, Stat, StatusPill, Tabs } from '../components/ui';
 import { useAction, useAuth, useLiveEvent } from '../hooks';
 import { ask } from '../components/Dialog';
 import { DownloadLink, NewTabLink } from '../components/NewTabLink';
+import { JoinQr, formatJoinCode } from '../components/JoinQr';
+import { DEMO } from '../env';
 
 type Tab = 'checkin' | 'payments' | 'round' | 'standings' | 'bracket' | 'settings';
 
@@ -19,6 +21,7 @@ export function StaffEvent() {
   const eventId = Number(useParams().id);
   const { state, error, clockSkew } = useLiveEvent(eventId);
   const [tab, setTab] = useState<Tab | null>(null);
+  const [showQr, setShowQr] = useState(false);
   const action = useAction();
 
   if (viewer.kind !== 'staff') return <Navigate to={`/login?mode=staff&next=/staff/events/${eventId}`} replace />;
@@ -46,6 +49,11 @@ export function StaffEvent() {
           </p>
         </div>
         <div className="no-print flex flex-wrap gap-2">
+          {ev.join_code && (
+            <button className="btn-primary btn-sm" onClick={() => setShowQr(true)}>
+              QR code · {formatJoinCode(ev.join_code)}
+            </button>
+          )}
           <Link className="btn-secondary btn-sm" to={`/events/${ev.id}`}>
             Player view
           </Link>
@@ -54,6 +62,38 @@ export function StaffEvent() {
           </NewTabLink>
         </div>
       </header>
+
+      {showQr && ev.join_code && (
+        <div className="fixed inset-0 z-40 grid place-items-center overflow-y-auto bg-slate-950/70 p-4" onClick={() => setShowQr(false)}>
+          <div className="card w-full max-w-md space-y-4 py-6" onClick={(e) => e.stopPropagation()}>
+            <div className="text-center">
+              <h2 className="text-xl font-bold">Scan to join {ev.name}</h2>
+              <p className="text-sm text-slate-500">
+                {ev.status === 'registration'
+                  ? 'Players scan this with their phone camera, log in with their name and tap Join.'
+                  : 'Players scan this to open the event on their phone and see their table.'}
+              </p>
+            </div>
+            <JoinQr code={ev.join_code} eventName={ev.name} size={300} />
+            {DEMO && (
+              <p className="text-center text-xs text-slate-500">
+                Demo: in the store this points at your store computer. Here, try the code on the Events page as a player.
+              </p>
+            )}
+            {ev.status === 'draft' && (
+              <p className="text-center text-sm text-amber-700 dark:text-amber-400">Open registration first, or players won't find the event.</p>
+            )}
+            <div className="flex flex-wrap justify-center gap-2">
+              <NewTabLink className="btn-secondary btn-sm" to={`/display/${ev.id}`}>
+                Show on projector
+              </NewTabLink>
+              <button className="btn-secondary btn-sm" onClick={() => setShowQr(false)}>
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <NextStep state={state} post={post} busy={action.busy} />
       <ErrorNote error={action.error} />

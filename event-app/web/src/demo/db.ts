@@ -6,6 +6,7 @@ import initSqlJs, { type Database, type SqlValue } from 'sql.js';
 import wasmUrl from 'sql.js/dist/sql-wasm.wasm?url';
 import schema from '../../../server/db/schema.sql?raw';
 import { MIGRATIONS } from '../../../server/db/migrations';
+import { backfillJoinCodes } from '../../../server/joinCode';
 
 export interface RunResult {
   changes: number;
@@ -106,6 +107,7 @@ export async function openDemoDb(saved?: Uint8Array): Promise<DemoDb> {
       db.exec(`PRAGMA user_version = ${v + 1}`);
     })();
   }
+  backfillJoinCodes(db as any);
   return db;
 }
 

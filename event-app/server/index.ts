@@ -16,17 +16,19 @@ function lanAddresses(): string[] {
     .map((i) => i.address);
 }
 
-const { app, pos } = await buildApp({ dbPath: DB_PATH });
+const urls = lanAddresses().map((ip) => `http://${ip}:${PORT}`);
+const publicUrls = process.env.PUBLIC_URL ? [process.env.PUBLIC_URL.replace(/\/$/, ''), ...urls] : urls;
+const { app, pos } = await buildApp({ dbPath: DB_PATH, publicUrls, publicUrlConfigured: !!process.env.PUBLIC_URL });
 await app.listen({ port: PORT, host: '0.0.0.0' });
 // Pull PayPal POS sales in the background (no-op until a POS API key is saved).
 pos.startPolling((eventIds) => eventIds.forEach(broadcast));
 
-const urls = lanAddresses().map((ip) => `http://${ip}:${PORT}`);
 console.log(`\n  Event app running.  Database: ${DB_PATH}\n`);
 console.log(`  On this computer:   http://localhost:${PORT}`);
 for (const url of urls) console.log(`  On the store Wi-Fi: ${url}`);
-if (urls[0]) {
+if (process.env.PUBLIC_URL) console.log(`  Public address:     ${publicUrls[0]}`);
+if (publicUrls[0]) {
   console.log('\n  Players can scan this to open the app:\n');
-  qrcode.generate(urls[0], { small: true });
+  qrcode.generate(publicUrls[0], { small: true });
 }
 console.log(`  Staff dashboard:    http://localhost:${PORT}/staff\n`);

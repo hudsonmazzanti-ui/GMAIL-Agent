@@ -3,6 +3,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import Database from 'better-sqlite3';
 import { MIGRATIONS } from './migrations.js';
+import { backfillJoinCodes } from '../joinCode.js';
 
 export type DB = Database.Database;
 
@@ -16,6 +17,7 @@ export function openDb(file: string): DB {
   db.pragma('foreign_keys = ON');
   db.exec(fs.readFileSync(path.join(here, 'schema.sql'), 'utf8'));
   migrate(db);
+  backfillJoinCodes(db);
   return db;
 }
 
@@ -61,6 +63,7 @@ export interface EventRow {
   require_payment: number;
   pos_product_uuid: string | null;
   pos_variant_uuid: string | null;
+  join_code: string | null;
   created_at: string;
 }
 

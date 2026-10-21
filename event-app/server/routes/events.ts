@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import type { DB, EventRow } from '../db/client.js';
 import { requirePlayer, requireStaff } from '../auth.js';
 import { broadcast, subscribe } from '../live.js';
+import { assignJoinCode, normalizeJoinCode } from '../joinCode.js';
 import * as t from '../tournament.js';
 
 export type EventBody = Partial<{
@@ -81,6 +82,7 @@ export function eventRoutes(app: FastifyInstance, db: DB) {
     const name = req.body?.name?.trim();
     if (!name) throw new t.HttpError(400, 'Event name is required');
     const newId = Number(db.prepare('INSERT INTO events (name) VALUES (?)').run(name).lastInsertRowid);
+    assignJoinCode(db, newId);
     updateEvent(db, newId, req.body);
     return { id: newId };
   });
@@ -105,6 +107,17 @@ export function eventRoutes(app: FastifyInstance, db: DB) {
     }
     db.prepare('UPDATE events SET status = ? WHERE id = ?').run(req.body.status, ev.id);
     return changed(ev.id);
+  });
+
+  /** Look up an event from the code players type or scan (case and dashes don't matter). */
+  app.get<{ Params: { code: string } }>('/api/join/:code', async (req) => {
+    const ev = db.prepare('SELECT id, name, status FROM events WHERE join_code = ?').get(normalizeJoinCode(req.params.code)) as
+      | { id: number; name: string; status: string }
+      | undefined;
+    if (!ev || (ev.status === 'draft' && req.viewer.kind !== 'staff')) {
+      throw new t.HttpError(404, 'No event with that code — check it with staff');
+    }
+    return { eventId: ev.id, name: ev.name, status: ev.status };
   });
 
   app.get<{ Params: { id: string } }>('/api/events/:id/state', async (req) => {

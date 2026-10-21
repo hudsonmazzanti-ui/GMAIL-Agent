@@ -35,6 +35,7 @@ The seed script uses `STAFF_PASSWORD` if set. Run it on an empty database, or se
 | --------- | ---------------- | ---------------------------------------- |
 | `PORT`    | `3000`           | Port to listen on (all interfaces)       |
 | `DB_PATH` | `data/events.db` | SQLite file holding all events & players |
+| `PUBLIC_URL` | this computer's Wi-Fi address | Address encoded in event QR codes |
 | `POS_OAUTH_URL`, `POS_PRODUCTS_URL`, `POS_PURCHASES_URL` | PayPal POS APIs | Override to point at the fake POS |
 
 **Backups:** stop the server and copy `data/events.db`.
@@ -43,10 +44,12 @@ The seed script uses `STAFF_PASSWORD` if set. Run it on an empty database, or se
 
 1. **Staff → New event.** Set the game, format, match length, round time, capacity and top cut.
 2. **Open registration.** Players log in with just their name (no email or password) and tap **Register**. Anyone who wants to stop others from using their name can add a 4-digit PIN, either when signing up or later from their profile (tap their name in the header).
-3. **Check-in.** As players arrive, tap **Check in**. Walk-ins: type their name under *Add walk-in*.
-4. **Start event.** This pairs round 1. Press **Start round** to start the timer, then show `/display/<id>` on a TV.
-5. Players see their table on their phone, report the result and their opponent confirms. Disputes show up in red for a judge. **Enter / Edit** lets staff set any result.
-6. When every result is in, press **Pair round N**. After the last Swiss round the button becomes **Start top N**, and then **Finish event**.
+3. **Show the QR code.** Every event gets a 6-character event code. Press **QR code** on the event's staff page and hold the screen up at the desk, or open the projector view, which shows a big QR while registration is open and a small one in the corner during rounds. Players scan it with their phone camera, or type the code under *Have an event code?* on the Events page, then log in with their name and tap **Join**.
+   The QR points at this computer's Wi-Fi address even if you opened the app as `localhost`. If the store uses a fixed name or address, set `PUBLIC_URL` (e.g. `PUBLIC_URL=http://events.local:3000 npm start`).
+4. **Check-in.** As players arrive, tap **Check in**. Walk-ins: type their name under *Add walk-in*.
+5. **Start event.** This pairs round 1. Press **Start round** to start the timer, then show `/display/<id>` on a TV.
+6. Players see their table on their phone, report the result and their opponent confirms. Disputes show up in red for a judge. **Enter / Edit** lets staff set any result.
+7. When every result is in, press **Pair round N**. After the last Swiss round the button becomes **Start top N**, and then **Finish event**.
 
 Players can drop from their phone. Staff can drop players, re-pair a round before it starts, add time, set, reset or remove PINs (*Staff → Players*), and fix earlier Swiss results while Swiss is still running.
 

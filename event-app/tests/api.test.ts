@@ -109,6 +109,25 @@ describe('full event through the API', () => {
     await new Client(app).post('/api/auth/player/pin', { pin: '1234' }, 401); // must be logged in
   });
 
+  it('gives every event a join code that players can look up', async () => {
+    const staff = new Client(app);
+    await staff.post('/api/auth/staff/login', { password: 'secret123' });
+    const { id } = await staff.post('/api/events', { name: 'Code night' });
+    const { event } = await staff.get(`/api/events/${id}/state`);
+    expect(event.join_code).toMatch(/^[A-HJKMNP-Z2-9]{6}$/);
+
+    const player = new Client(app);
+    // Drafts are hidden from players; staff can still look them up.
+    await player.call('GET', `/api/join/${event.join_code}`, undefined, 404);
+    expect((await staff.get(`/api/join/${event.join_code}`)).eventId).toBe(id);
+    await staff.post(`/api/events/${id}/status`, { status: 'registration' });
+    // Case, spaces and dashes don't matter.
+    const typed = `${event.join_code.slice(0, 3)}-${event.join_code.slice(3)}`.toLowerCase();
+    expect(await player.get(`/api/join/${typed}`)).toEqual({ eventId: id, name: 'Code night', status: 'registration' });
+    await player.call('GET', '/api/join/ZZZZZZ', undefined, 404);
+    expect((await player.get('/api/server-info')).publicUrls).toEqual([]);
+  });
+
   it('locks out PIN guessing', async () => {
     const x = new Client(app);
     await x.post('/api/auth/player/signup', { name: 'Locked', pin: '4321' });

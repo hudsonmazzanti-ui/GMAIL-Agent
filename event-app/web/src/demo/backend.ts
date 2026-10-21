@@ -23,6 +23,7 @@ interface Route {
 }
 
 const FAKE_POS_BASE = 'http://fake-pos';
+export const DEMO_STORE_URL = 'http://192.168.1.20:3000';
 // Bump when the seed changes so returning visitors get the new sample data.
 const STORE_KEY = 'event-hub-demo-v2';
 
@@ -46,6 +47,8 @@ export class DemoBackend {
       addHook: (name: string, h: Handler) => name === 'preHandler' && this.preHandlers.push(h),
     } as any;
     const sqlite = db as any;
+    // The demo has no store computer; QR codes point at a typical store address instead.
+    app.get('/api/server-info', async () => ({ publicUrls: [DEMO_STORE_URL], configured: true }));
     authRoutes(app, sqlite);
     playerRoutes(app, sqlite);
     eventRoutes(app, sqlite);

@@ -35,4 +35,7 @@ export const MIGRATIONS: string[] = [
      since     INTEGER NOT NULL,
      PRIMARY KEY (event_id, player_id)
    );`,
+  // 2: Event join codes, shown as a QR code for players to scan (see server/joinCode.ts).
+  `ALTER TABLE events ADD COLUMN join_code TEXT;
+   CREATE UNIQUE INDEX idx_events_join_code ON events(join_code);`,
 ];

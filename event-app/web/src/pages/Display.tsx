@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { DEMO } from '../env';
 import { Bracket } from '../components/Bracket';
+import { JoinQr, QrCode, formatJoinCode, useJoinUrl } from '../components/JoinQr';
 import { RoundTimer } from '../components/RoundTimer';
 import { StandingsTable } from '../components/Tables';
 import { useLiveEvent } from '../hooks';
@@ -62,6 +63,19 @@ export function Display() {
               </div>
             ))}
           </div>
+        ) : state.event.join_code && ['registration', 'checkin'].includes(state.event.status) ? (
+          <div className="flex flex-wrap items-center justify-center gap-12 py-8">
+            <JoinQr code={state.event.join_code} eventName={state.event.name} size={340} />
+            <div className="max-w-md space-y-4">
+              <p className="text-5xl font-black leading-tight">Scan to join</p>
+              <p className="text-2xl text-slate-300">
+                Open your phone camera and point it at the code, or enter the event code on the Events page.
+              </p>
+              <p className="text-2xl text-slate-400">
+                {state.counts.registered} registered · {state.counts.checkedIn} checked in
+              </p>
+            </div>
+          </div>
         ) : (
           <p className="py-24 text-center text-3xl text-slate-500">
             {state.counts.checkedIn} players checked in · pairings coming soon
@@ -73,6 +87,10 @@ export function Display() {
         </div>
       )}
       {view === 'bracket' && <Bracket rounds={state.rounds} champion={state.champion} />}
+
+      {state.event.join_code && round && state.event.status !== 'complete' && (
+        <CornerQr code={state.event.join_code} />
+      )}
 
       <nav className="fixed bottom-3 right-3 flex gap-1 opacity-20 transition hover:opacity-100">
         {(['pairings', 'standings', 'bracket'] as View[]).map((v) => (
@@ -91,6 +109,21 @@ export function Display() {
           </Link>
         )}
       </nav>
+    </div>
+  );
+}
+
+/** Small QR in the corner during rounds, so latecomers can scan for their table. */
+function CornerQr({ code }: { code: string }) {
+  const url = useJoinUrl(code);
+  if (!url) return null;
+  return (
+    <div className="fixed bottom-3 left-3 flex items-center gap-3 rounded-xl bg-slate-900/90 p-2 pr-4">
+      <QrCode text={url} size={112} label="QR code to open this event" />
+      <div>
+        <div className="text-sm text-slate-400">Your table on your phone</div>
+        <div className="font-mono text-2xl font-bold tracking-widest">{formatJoinCode(code)}</div>
+      </div>
     </div>
   );
 }
