@@ -1,4 +1,5 @@
-import { useParams, useSearchParams } from 'react-router-dom';
+import { Link, useParams, useSearchParams } from 'react-router-dom';
+import { DEMO } from '../env';
 import { useLiveEvent } from '../hooks';
 
 /** Printable match slips for a round (one per table), for stores that collect paper results. */
@@ -15,9 +16,15 @@ export function PrintSlips() {
   return (
     <div className="bg-white p-6 text-black">
       <div className="no-print mb-4 flex items-center gap-3">
-        <button className="btn-primary" onClick={() => window.print()}>
-          Print
-        </button>
+        {DEMO ? (
+          <Link className="btn-secondary" to={`/staff/events/${state.event.id}`}>
+            ← Back
+          </Link>
+        ) : (
+          <button className="btn-primary" onClick={() => window.print()}>
+            Print
+          </button>
+        )}
         <span className="text-sm text-slate-600">
           {state.event.name} — {round.label} — {round.matches.filter((m) => m.p2).length} slips
         </span>

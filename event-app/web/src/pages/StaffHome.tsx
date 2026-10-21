@@ -4,6 +4,7 @@ import { api, formatDate, type EventListItem } from '../api';
 import { EventForm } from '../components/EventForm';
 import { Empty, ErrorNote, StatusPill, Tabs } from '../components/ui';
 import { useAction, useAuth, useLive } from '../hooks';
+import { ask, askText } from '../components/Dialog';
 
 type Tab = 'events' | 'new' | 'players' | 'settings';
 
@@ -95,8 +96,8 @@ function PlayersTab() {
     load();
   }, [load]);
 
-  const resetPin = (p: PlayerRow) => {
-    const pin = prompt(`New 4-digit PIN for ${p.name}:`);
+  const resetPin = async (p: PlayerRow) => {
+    const pin = await askText(`New 4-digit PIN for ${p.name}:`, '', { inputMode: 'numeric' });
     if (!pin) return;
     run(async () => {
       await api(`/api/players/${p.id}`, { pin }, 'PATCH');
@@ -104,8 +105,8 @@ function PlayersTab() {
       await load();
     });
   };
-  const rename = (p: PlayerRow) => {
-    const name = prompt('Name:', p.name);
+  const rename = async (p: PlayerRow) => {
+    const name = await askText('Name:', p.name);
     if (!name || name === p.name) return;
     run(async () => {
       await api(`/api/players/${p.id}`, { name }, 'PATCH');
@@ -211,7 +212,10 @@ function PosSettings() {
             <button
               className="btn-secondary btn-sm"
               disabled={busy}
-              onClick={() => confirm('Disconnect PayPal POS? Recorded payments are kept.') && run(() => api('/api/pos/disconnect', {})).then(load)}
+              onClick={async () =>
+                (await ask('Disconnect PayPal POS? Recorded payments are kept.', { confirmLabel: 'Disconnect' })) &&
+                run(() => api('/api/pos/disconnect', {})).then(load)
+              }
             >
               Disconnect
             </button>

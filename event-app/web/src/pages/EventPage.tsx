@@ -7,6 +7,7 @@ import { RoundTimer } from '../components/RoundTimer';
 import { PairingsTable, StandingsTable } from '../components/Tables';
 import { Empty, ErrorNote, StatusPill, Tabs } from '../components/ui';
 import { useAction, useAuth, useLiveEvent } from '../hooks';
+import { ask } from '../components/Dialog';
 
 type Tab = 'pairings' | 'standings' | 'bracket' | 'players';
 
@@ -208,7 +209,7 @@ function PlayerPanel({ state, clockSkew }: { state: EventState; clockSkew: numbe
       <ErrorNote error={error} />
       <div className="flex flex-wrap gap-2">
         {preStart && (
-          <button className="btn-secondary btn-sm" disabled={busy} onClick={() => confirm('Unregister from this event?') && call('unregister')}>
+          <button className="btn-secondary btn-sm" disabled={busy} onClick={async () => (await ask('Unregister from this event?', { confirmLabel: 'Unregister' })) && call('unregister')}>
             Unregister
           </button>
         )}
@@ -216,7 +217,7 @@ function PlayerPanel({ state, clockSkew }: { state: EventState; clockSkew: numbe
           <button
             className="btn-secondary btn-sm"
             disabled={busy}
-            onClick={() => confirm('Drop from the event? You will not be paired in future rounds.') && call('drop')}
+            onClick={async () => (await ask('Drop from the event? You will not be paired in future rounds.', { confirmLabel: 'Drop', danger: true })) && call('drop')}
           >
             Drop from event
           </button>

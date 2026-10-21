@@ -13,7 +13,8 @@
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "fake-pos": "tsx scripts/fake-pos.ts",
-    "serve:fake-pos": "POS_OAUTH_URL=http://localhost:4545 POS_PRODUCTS_URL=http://localhost:4545 POS_PURCHASES_URL=http://localhost:4545 tsx server/index.ts"
+    "serve:fake-pos": "POS_OAUTH_URL=http://localhost:4545 POS_PRODUCTS_URL=http://localhost:4545 POS_PURCHASES_URL=http://localhost:4545 tsx server/index.ts",
+    "build:demo": "vite build --config vite.demo.config.ts --mode demo"
   },
   "engines": {
     "node": ">=20"
@@ -35,6 +36,7 @@
     "@types/qrcode-terminal": "^0.12.2",
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",
+    "@types/sql.js": "^1.4.11",
     "@vitejs/plugin-react": "^4.3.4",
     "autoprefixer": "^10.4.20",
     "concurrently": "^9.1.0",
@@ -42,9 +44,11 @@
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-router-dom": "^6.28.0",
+    "sql.js": "^1.12.0",
     "tailwindcss": "^3.4.16",
     "typescript": "^5.7.2",
     "vite": "^6.0.3",
+    "vite-plugin-singlefile": "^2.1.0",
     "vitest": "^2.1.8"
   }
 }

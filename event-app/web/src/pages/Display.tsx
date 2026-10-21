@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { useParams, useSearchParams } from 'react-router-dom';
+import { Link, useParams, useSearchParams } from 'react-router-dom';
+import { DEMO } from '../env';
 import { Bracket } from '../components/Bracket';
 import { RoundTimer } from '../components/RoundTimer';
 import { StandingsTable } from '../components/Tables';
@@ -83,6 +84,11 @@ export function Display() {
           <button className="tab" onClick={() => setParams({})}>
             auto
           </button>
+        )}
+        {DEMO && (
+          <Link className="tab" to={`/staff/events/${eventId}`}>
+            exit
+          </Link>
         )}
       </nav>
     </div>

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api, money, type EventState, type PaymentView } from '../api';
+import { ask } from './Dialog';
 
 const STYLE = {
   paid: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/50 dark:text-emerald-300',
@@ -64,7 +65,7 @@ export function PaymentActions({
           className="text-xs text-slate-400 hover:text-rose-600"
           title={payment.method === 'pos' ? 'Move this POS sale back to unassigned' : 'Undo'}
           disabled={busy}
-          onClick={() => confirm('Undo this payment?') && call(`/api/payments/${payment.id}`, undefined, 'DELETE')}
+          onClick={async () => (await ask('Undo this payment?', { confirmLabel: 'Undo' })) && call(`/api/payments/${payment.id}`, undefined, 'DELETE')}
         >
           ✕
         </button>

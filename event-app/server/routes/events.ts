@@ -4,7 +4,7 @@ import { requirePlayer, requireStaff } from '../auth.js';
 import { broadcast, subscribe } from '../live.js';
 import * as t from '../tournament.js';
 
-type EventBody = Partial<{
+export type EventBody = Partial<{
   name: string;
   game: string;
   format: string;
@@ -161,7 +161,7 @@ export function eventRoutes(app: FastifyInstance, db: DB) {
   });
 }
 
-function updateEvent(db: DB, eventId: number, body: EventBody) {
+export function updateEvent(db: DB, eventId: number, body: EventBody) {
   const ev = t.getEvent(db, eventId);
   const started = !['draft', 'registration', 'checkin'].includes(ev.status);
   for (const [key, value] of Object.entries(body) as [keyof EventBody, unknown][]) {

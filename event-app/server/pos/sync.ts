@@ -195,7 +195,8 @@ export class PosService {
       }
     };
     const handle = setInterval(tick, intervalMs);
-    handle.unref();
+    // Don't keep Node alive just for polling (no-op in browsers).
+    (handle as { unref?: () => void }).unref?.();
     return () => clearInterval(handle);
   }
 }

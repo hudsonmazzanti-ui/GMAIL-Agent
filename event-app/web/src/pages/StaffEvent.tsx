@@ -9,6 +9,8 @@ import { RoundTimer } from '../components/RoundTimer';
 import { PairingsTable, StandingsTable } from '../components/Tables';
 import { Empty, ErrorNote, Stat, StatusPill, Tabs } from '../components/ui';
 import { useAction, useAuth, useLiveEvent } from '../hooks';
+import { ask } from '../components/Dialog';
+import { DownloadLink, NewTabLink } from '../components/NewTabLink';
 
 type Tab = 'checkin' | 'payments' | 'round' | 'standings' | 'bracket' | 'settings';
 
@@ -47,9 +49,9 @@ export function StaffEvent() {
           <Link className="btn-secondary btn-sm" to={`/events/${ev.id}`}>
             Player view
           </Link>
-          <a className="btn-secondary btn-sm" href={`/display/${ev.id}`} target="_blank" rel="noreferrer">
+          <NewTabLink className="btn-secondary btn-sm" to={`/display/${ev.id}`}>
             Projector ↗
-          </a>
+          </NewTabLink>
         </div>
       </header>
 
@@ -82,9 +84,9 @@ export function StaffEvent() {
       {activeTab === 'standings' && (
         <div className="card space-y-3">
           <div className="flex justify-end">
-            <a className="btn-secondary btn-sm" href={`/api/events/${ev.id}/standings.csv`}>
+            <DownloadLink className="btn-secondary btn-sm" href={`/api/events/${ev.id}/standings.csv`}>
               Download CSV
-            </a>
+            </DownloadLink>
           </div>
           <StandingsTable rows={state.standings} />
         </div>
@@ -116,14 +118,14 @@ function NextStep({ state, post, busy }: { state: EventState; post: (path: strin
       text = 'Players can register from their phones. Check players in as they arrive.';
       buttons = [
         ['Close registration', () => post('status', { status: 'checkin' }), true],
-        [`Start event (${state.counts.checkedIn} checked in)`, () => confirmStart(state) && post('advance')],
+        [`Start event (${state.counts.checkedIn} checked in)`, async () => (await confirmStart(state)) && post('advance')],
       ];
       break;
     case 'checkin':
       text = 'Registration is closed. Only checked-in players are paired.';
       buttons = [
         ['Reopen registration', () => post('status', { status: 'registration' }), true],
-        [`Start event (${state.counts.checkedIn} checked in)`, () => confirmStart(state) && post('advance')],
+        [`Start event (${state.counts.checkedIn} checked in)`, async () => (await confirmStart(state)) && post('advance')],
       ];
       break;
     case 'swiss':
@@ -163,9 +165,10 @@ function NextStep({ state, post, busy }: { state: EventState; post: (path: strin
 function confirmStart(state: EventState) {
   const notHere = state.registrations.filter((r) => r.status === 'registered').length;
   const rounds = state.event.swiss_rounds ?? state.recommendedRounds;
-  return confirm(
+  return ask(
     `Start with ${state.counts.checkedIn} players and ${rounds} Swiss rounds?` +
       (notHere ? `\n${notHere} registered player(s) are not checked in and won't be paired.` : ''),
+    { confirmLabel: 'Start event' },
   );
 }
 
@@ -214,7 +217,7 @@ function CheckInTab({ state }: { state: EventState }) {
                 <button
                   className="btn-secondary btn-sm"
                   disabled={busy}
-                  onClick={() => confirm(`Drop ${r.name}?`) && call('drop', { playerId: r.playerId })}
+                  onClick={async () => (await ask(`Drop ${r.name}?`, { confirmLabel: 'Drop', danger: true })) && call('drop', { playerId: r.playerId })}
                 >
                   Drop
                 </button>
@@ -223,7 +226,7 @@ function CheckInTab({ state }: { state: EventState }) {
                 <button
                   className="btn-secondary btn-sm"
                   disabled={busy}
-                  onClick={() => confirm(`Remove ${r.name} from the event?`) && call('unregister', { playerId: r.playerId })}
+                  onClick={async () => (await ask(`Remove ${r.name} from the event?`, { confirmLabel: 'Remove' })) && call('unregister', { playerId: r.playerId })}
                 >
                   Remove
                 </button>
@@ -364,14 +367,14 @@ function RoundTab({ state, clockSkew }: { state: EventState; clockSkew: number }
             <button
               className="btn-secondary btn-sm"
               disabled={busy}
-              onClick={() => confirm('Throw away these pairings and pair again?') && run(() => api(`/api/rounds/${round.id}/repair`, {}))}
+              onClick={async () => (await ask('Throw away these pairings and pair again?', { confirmLabel: 'Re-pair' })) && run(() => api(`/api/rounds/${round.id}/repair`, {}))}
             >
               Re-pair
             </button>
           )}
-          <a className="btn-secondary btn-sm" href={`/print/${ev.id}?round=${round.id}`} target="_blank" rel="noreferrer">
+          <NewTabLink className="btn-secondary btn-sm" to={`/print/${ev.id}?round=${round.id}`}>
             Print slips
-          </a>
+          </NewTabLink>
         </div>
       </div>
       <ErrorNote error={error} />
@@ -487,8 +490,8 @@ function SettingsTab({ state }: { state: EventState }) {
         <button
           className="btn-danger btn-sm"
           disabled={busy}
-          onClick={() =>
-            confirm(`Delete “${ev.name}” permanently?`) &&
+          onClick={async () =>
+            (await ask(`Delete “${ev.name}” permanently?`, { confirmLabel: 'Delete', danger: true })) &&
             run(async () => {
               await api(`/api/events/${ev.id}`, undefined, 'DELETE');
               navigate('/staff');
@@ -554,8 +557,10 @@ function PaymentsTab({ state }: { state: EventState }) {
             <button
               className="btn-secondary btn-sm"
               disabled={busy}
-              onClick={() =>
-                confirm('Stop matching POS sales to this event? (The product stays on the POS — delete it there if needed.)') &&
+              onClick={async () =>
+                (await ask('Stop matching POS sales to this event? The product stays on the POS; delete it there if needed.', {
+                  confirmLabel: 'Unlink',
+                })) &&
                 run(() => api(`/api/events/${ev.id}/pos/product`, undefined, 'DELETE'))
               }
             >
@@ -567,9 +572,9 @@ function PaymentsTab({ state }: { state: EventState }) {
             Add to PayPal POS
           </button>
         )}
-        <a className="btn-secondary btn-sm" href={`/api/events/${ev.id}/payments.csv`}>
+        <DownloadLink className="btn-secondary btn-sm" href={`/api/events/${ev.id}/payments.csv`}>
           Payments CSV
-        </a>
+        </DownloadLink>
       </div>
       <ErrorNote error={error} />
 
