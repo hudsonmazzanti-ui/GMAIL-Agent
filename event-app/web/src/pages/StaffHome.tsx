@@ -140,13 +140,128 @@ function PlayersTab() {
   );
 }
 
+interface PosStatus {
+  connected: boolean;
+  clientId: string | null;
+  lastSyncAt: string | null;
+  lastError: string | null;
+  apiKeyUrl: string;
+}
+
 function SettingsTab() {
+  return (
+    <div className="grid gap-4 lg:grid-cols-2">
+      <PosSettings />
+      <PasswordSettings />
+    </div>
+  );
+}
+
+function PosSettings() {
+  const [status, setStatus] = useState<PosStatus | null>(null);
+  const [apiKey, setApiKey] = useState('');
+  const [clientId, setClientId] = useState('');
+  const [note, setNote] = useState<string | null>(null);
+  const { busy, error, run } = useAction();
+  const load = useCallback(() => api<PosStatus>('/api/pos/status').then(setStatus), []);
+  useEffect(() => {
+    load();
+  }, [load]);
+  if (!status) return null;
+
+  return (
+    <div className="card space-y-3">
+      <div className="flex items-center justify-between gap-2">
+        <h3 className="font-semibold">PayPal POS</h3>
+        <span
+          className={`pill ${status.connected ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/50 dark:text-emerald-300' : 'bg-slate-200 text-slate-700 dark:bg-slate-800 dark:text-slate-300'}`}
+        >
+          {status.connected ? 'Connected' : 'Not connected'}
+        </span>
+      </div>
+      <p className="text-sm text-slate-600 dark:text-slate-300">
+        Entry fees are rung up on your PayPal POS like any other item. Event Hub reads the sales back and marks players paid. No
+        payment happens in this app.
+      </p>
+      {status.connected ? (
+        <>
+          <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm">
+            <dt className="text-slate-500">Client ID</dt>
+            <dd className="truncate font-mono">{status.clientId}</dd>
+            <dt className="text-slate-500">Last sync</dt>
+            <dd>{status.lastSyncAt ? new Date(status.lastSyncAt).toLocaleTimeString() : 'never'}</dd>
+          </dl>
+          <ErrorNote error={status.lastError} />
+          {note && <p className="text-sm text-emerald-600">{note}</p>}
+          <ErrorNote error={error} />
+          <div className="flex flex-wrap gap-2">
+            <button
+              className="btn-secondary btn-sm"
+              disabled={busy}
+              onClick={() =>
+                run(async () => {
+                  setNote(null);
+                  const r = await api<{ changedEvents: number[] }>('/api/pos/sync', {});
+                  setNote(r.changedEvents.length ? 'New sales imported.' : 'Up to date — no new entry sales.');
+                }).finally(load)
+              }
+            >
+              Sync now
+            </button>
+            <button
+              className="btn-secondary btn-sm"
+              disabled={busy}
+              onClick={() => confirm('Disconnect PayPal POS? Recorded payments are kept.') && run(() => api('/api/pos/disconnect', {})).then(load)}
+            >
+              Disconnect
+            </button>
+          </div>
+        </>
+      ) : (
+        <form
+          className="space-y-3"
+          onSubmit={(e) => {
+            e.preventDefault();
+            run(async () => {
+              setStatus({ ...(await api<PosStatus>('/api/pos/connect', { apiKey, clientId })), apiKeyUrl: status.apiKeyUrl });
+              setApiKey('');
+            });
+          }}
+        >
+          <ol className="list-decimal space-y-1 pl-5 text-sm text-slate-600 dark:text-slate-300">
+            <li>
+              <a className="text-indigo-600 underline dark:text-indigo-400" href={status.apiKeyUrl} target="_blank" rel="noreferrer">
+                Create an API key
+              </a>{' '}
+              while logged in to your PayPal POS account as the owner. The needed permissions are pre-filled.
+            </li>
+            <li>Paste the API key (and the client ID shown with it) below.</li>
+          </ol>
+          <label className="block">
+            <span className="label">API key</span>
+            <textarea className="input min-h-20 font-mono text-xs" value={apiKey} onChange={(e) => setApiKey(e.target.value)} />
+          </label>
+          <label className="block">
+            <span className="label">Client ID</span>
+            <input className="input font-mono" value={clientId} onChange={(e) => setClientId(e.target.value)} placeholder="Usually read from the key automatically" />
+          </label>
+          <ErrorNote error={error} />
+          <button className="btn-primary" disabled={busy || !apiKey.trim()}>
+            Test &amp; connect
+          </button>
+        </form>
+      )}
+    </div>
+  );
+}
+
+function PasswordSettings() {
   const [password, setPassword] = useState('');
   const [done, setDone] = useState(false);
   const { busy, error, run } = useAction();
   return (
     <form
-      className="card max-w-sm space-y-3"
+      className="card h-fit space-y-3"
       onSubmit={(e) => {
         e.preventDefault();
         run(async () => {

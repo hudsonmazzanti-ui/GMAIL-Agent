@@ -11,9 +11,13 @@
     "serve": "tsx server/index.ts",
     "seed": "tsx scripts/seed.ts",
     "test": "vitest run",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "fake-pos": "tsx scripts/fake-pos.ts",
+    "serve:fake-pos": "POS_OAUTH_URL=http://localhost:4545 POS_PRODUCTS_URL=http://localhost:4545 POS_PURCHASES_URL=http://localhost:4545 tsx server/index.ts"
   },
-  "engines": { "node": ">=20" },
+  "engines": {
+    "node": ">=20"
+  },
   "dependencies": {
     "@fastify/cookie": "^11.0.0",
     "@fastify/static": "^8.0.0",
@@ -24,6 +28,7 @@
     "tsx": "^4.19.0"
   },
   "devDependencies": {
+    "@fastify/formbody": "^8.0.2",
     "@types/bcryptjs": "^2.4.6",
     "@types/better-sqlite3": "^7.6.12",
     "@types/node": "^22.10.0",

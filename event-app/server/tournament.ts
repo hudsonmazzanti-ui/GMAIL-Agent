@@ -4,6 +4,7 @@ import { computeStandings, type StandingRow } from './engine/standings.js';
 import { pairSwissRound, recommendedRounds } from './engine/swiss.js';
 import { matchWinner, nextTopCutRound, seedTopCut } from './engine/topcut.js';
 import * as timer from './engine/timer.js';
+import { paidPayment, paymentState } from './pos/payments.js';
 import { makeRng, type MatchResult, type Pairing } from './engine/types.js';
 
 export class HttpError extends Error {
@@ -359,6 +360,9 @@ export function setCheckIn(db: DB, eventId: number, playerId: number, checkedIn:
     .get(eventId, playerId) as { status: RegistrationStatus } | undefined;
   if (!reg) throw bad('Player is not registered');
   if (ev.status === 'swiss' && !checkedIn) throw bad('Event has started — drop the player instead');
+  if (checkedIn && ev.require_payment && ev.entry_fee_cents > 0 && !paidPayment(db, eventId, playerId)) {
+    throw bad('Entry fee not paid yet — collect it on the POS or mark it paid first');
+  }
   db.prepare('UPDATE registrations SET status = ? WHERE event_id = ? AND player_id = ?').run(
     checkedIn ? 'checked_in' : 'registered',
     eventId,
@@ -380,8 +384,16 @@ export function drop(db: DB, eventId: number, playerId: number): void {
 
 const ROUND_LABELS: Record<number, string> = { 1: 'Finals', 2: 'Semifinals', 4: 'Quarterfinals' };
 
-export function eventState(db: DB, eventId: number) {
+/** Who is looking: staff see every payment and the POS tray; a player sees only their own payment. */
+export interface StateViewer {
+  staff: boolean;
+  playerId?: number;
+}
+
+export function eventState(db: DB, eventId: number, viewer: StateViewer = { staff: false }) {
   const ev = getEvent(db, eventId);
+  const pay = paymentState(db, eventId);
+  const canSeePayment = (playerId: number) => viewer.staff || viewer.playerId === playerId;
   const names = new Map<number, string>();
   const registrations = (
     db
@@ -393,8 +405,19 @@ export function eventState(db: DB, eventId: number) {
       .all(eventId) as { player_id: number; status: RegistrationStatus; dropped_after_round: number | null; name: string; game_id: string | null }[]
   ).map((r) => {
     names.set(r.player_id, r.name);
-    return { playerId: r.player_id, name: r.name, gameId: r.game_id, status: r.status, droppedAfterRound: r.dropped_after_round };
+    return {
+      playerId: r.player_id,
+      name: r.name,
+      gameId: r.game_id,
+      status: r.status,
+      droppedAfterRound: r.dropped_after_round,
+      payment: canSeePayment(r.player_id) ? (pay.byPlayer.get(r.player_id) ?? null) : null,
+      waitingForPosSince: viewer.staff ? (pay.waiting.get(r.player_id) ?? null) : null,
+    };
   });
+  const owing = registrations.filter(
+    (r) => (r.status === 'registered' || r.status === 'checked_in') && !(pay.byPlayer.get(r.playerId)?.status === 'paid'),
+  ).length;
   const player = (id: number | null) => (id === null ? null : { id, name: names.get(id) ?? `Player #${id}` });
 
   const roundList = rounds(db, eventId).map((r) => {
@@ -445,6 +468,15 @@ export function eventState(db: DB, eventId: number) {
     rounds: roundList,
     standings: table,
     champion,
+    payments: {
+      feeCents: ev.entry_fee_cents,
+      currency: ev.currency,
+      requirePayment: !!ev.require_payment,
+      onPos: !!ev.pos_product_uuid,
+      paidCount: pay.paidCount,
+      owing: ev.entry_fee_cents > 0 ? owing : 0,
+      ...(viewer.staff ? { totals: pay.totals, refunded: pay.refunded, unassigned: pay.unassigned } : {}),
+    },
     serverNow: Date.now(),
   };
 }

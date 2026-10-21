@@ -10,13 +10,17 @@ import { authRoutes } from './routes/auth.js';
 import { eventRoutes } from './routes/events.js';
 import { playRoutes } from './routes/play.js';
 import { playerRoutes } from './routes/players.js';
+import { posRoutes } from './routes/pos.js';
+import type { PosUrls } from './pos/client.js';
+import { PosService } from './pos/sync.js';
 import { HttpError } from './tournament.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 export const WEB_DIST = path.join(here, '..', 'web', 'dist');
 
-export async function buildApp(opts: { dbPath: string; logger?: boolean }) {
+export async function buildApp(opts: { dbPath: string; logger?: boolean; posUrls?: PosUrls }) {
   const db: DB = openDb(opts.dbPath);
+  const pos = new PosService(db, opts.posUrls);
   const app = Fastify({ logger: opts.logger ?? false });
   await app.register(cookie);
 
@@ -37,6 +41,7 @@ export async function buildApp(opts: { dbPath: string; logger?: boolean }) {
   playerRoutes(app, db);
   eventRoutes(app, db);
   playRoutes(app, db);
+  posRoutes(app, db, pos);
 
   if (fs.existsSync(WEB_DIST)) {
     await app.register(fastifyStatic, { root: WEB_DIST });
@@ -48,5 +53,5 @@ export async function buildApp(opts: { dbPath: string; logger?: boolean }) {
   }
 
   app.addHook('onClose', async () => db.close());
-  return { app, db };
+  return { app, db, pos };
 }

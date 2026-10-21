@@ -44,6 +44,16 @@ export const STATUS_STYLE: Record<EventRow['status'], string> = {
   complete: 'bg-slate-200 text-slate-700 dark:bg-slate-800 dark:text-slate-300',
 };
 
+export type PaymentView = NonNullable<EventState['registrations'][number]['payment']>;
+
+export function money(cents: number, currency: string) {
+  try {
+    return new Intl.NumberFormat(undefined, { style: 'currency', currency }).format(cents / 100);
+  } catch {
+    return `${(cents / 100).toFixed(2)} ${currency}`;
+  }
+}
+
 export const pct = (n: number) => `${(n * 100).toFixed(1)}%`;
 export const record = (s: StandingView) => `${s.wins}-${s.losses}-${s.draws}`;
 

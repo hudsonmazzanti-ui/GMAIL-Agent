@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, Navigate, useNavigate, useParams } from 'react-router-dom';
-import { api, formatDate, type EventState, type MatchView, type RoundView } from '../api';
+import { api, formatDate, money, type EventState, type MatchView, type RoundView } from '../api';
 import { Bracket } from '../components/Bracket';
+import { PaymentActions, PaymentBadge } from '../components/Payments';
 import { EventForm, fromRow } from '../components/EventForm';
 import { ResultForm } from '../components/ResultForm';
 import { RoundTimer } from '../components/RoundTimer';
@@ -9,7 +10,7 @@ import { PairingsTable, StandingsTable } from '../components/Tables';
 import { Empty, ErrorNote, Stat, StatusPill, Tabs } from '../components/ui';
 import { useAction, useAuth, useLiveEvent } from '../hooks';
 
-type Tab = 'checkin' | 'round' | 'standings' | 'bracket' | 'settings';
+type Tab = 'checkin' | 'payments' | 'round' | 'standings' | 'bracket' | 'settings';
 
 export function StaffEvent() {
   const { viewer } = useAuth();
@@ -65,6 +66,7 @@ export function StaffEvent() {
       <Tabs<Tab>
         tabs={[
           ['checkin', 'Players & check-in'],
+          ['payments', ev.entry_fee_cents ? `Payments${state.payments.owing ? ` (${state.payments.owing} owe)` : ''}` : 'Payments'],
           ['round', current ? current.label : 'Rounds'],
           ['standings', 'Standings'],
           ...(state.rounds.some((r) => r.phase === 'topcut') ? ([['bracket', 'Bracket']] as [Tab, string][]) : []),
@@ -75,6 +77,7 @@ export function StaffEvent() {
       />
 
       {activeTab === 'checkin' && <CheckInTab state={state} />}
+      {activeTab === 'payments' && <PaymentsTab state={state} />}
       {activeTab === 'round' && <RoundTab state={state} clockSkew={clockSkew} />}
       {activeTab === 'standings' && (
         <div className="card space-y-3">
@@ -171,7 +174,7 @@ function confirmStart(state: EventState) {
 function CheckInTab({ state }: { state: EventState }) {
   const ev = state.event;
   const [q, setQ] = useState('');
-  const { busy, error, run } = useAction();
+  const { busy, error, setError, run } = useAction();
   const call = (path: string, body: unknown) => run(() => api(`/api/events/${ev.id}/${path}`, body));
   const canCheckIn = ['draft', 'registration', 'checkin', 'swiss'].includes(ev.status);
 
@@ -194,6 +197,9 @@ function CheckInTab({ state }: { state: EventState }) {
               </span>
               {r.status === 'waitlist' && <span className="pill bg-amber-100 text-amber-800 dark:bg-amber-900/50 dark:text-amber-300">waitlist</span>}
               {r.status === 'dropped' && <span className="pill bg-slate-200 text-slate-600 dark:bg-slate-800">dropped after R{r.droppedAfterRound}</span>}
+              {ev.entry_fee_cents > 0 && r.status !== 'dropped' && (
+                <PaymentActions state={state} playerId={r.playerId} payment={r.payment} waitingSince={r.waitingForPosSince} onError={setError} />
+              )}
               {canCheckIn && (r.status === 'registered' || r.status === 'waitlist') && (
                 <button className="btn-primary btn-sm" disabled={busy} onClick={() => call('checkin', { playerId: r.playerId, checkedIn: true })}>
                   Check in
@@ -247,8 +253,8 @@ function AddPlayer({ state }: { state: EventState }) {
   const add = (playerId: number) =>
     run(async () => {
       await api(`/api/events/${ev.id}/register`, { playerId });
-      // Walk-ins at the desk are present, so check them in right away.
-      if (['registration', 'checkin', 'draft'].includes(ev.status)) {
+      // Walk-ins at the desk are present, so check them in right away (unless they must pay first).
+      if (['registration', 'checkin', 'draft'].includes(ev.status) && !(ev.require_payment && ev.entry_fee_cents > 0)) {
         await api(`/api/events/${ev.id}/checkin`, { playerId, checkedIn: true });
       }
       setQ('');
@@ -461,6 +467,7 @@ function SettingsTab({ state }: { state: EventState }) {
           key={ev.id}
           initial={fromRow(ev)}
           started={started}
+          feeLocked={!!ev.pos_product_uuid}
           recommendedRounds={state.recommendedRounds}
           submitLabel="Save changes"
           busy={busy}
@@ -490,6 +497,140 @@ function SettingsTab({ state }: { state: EventState }) {
         >
           Delete event
         </button>
+      </div>
+    </div>
+  );
+}
+
+// ---------- Payments ----------
+
+function PaymentsTab({ state }: { state: EventState }) {
+  const ev = state.event;
+  const p = state.payments;
+  const { busy, error, setError, run } = useAction();
+  const [pick, setPick] = useState<Record<number, number>>({});
+  const totals = p.totals ?? { pos: 0, cash: 0, comp: 0 };
+  const unpaid = state.registrations.filter(
+    (r) => (r.status === 'registered' || r.status === 'checked_in') && r.payment?.status !== 'paid',
+  );
+
+  if (!ev.entry_fee_cents) {
+    return (
+      <div className="card">
+        <Empty>This event is free. Set an entry fee in Settings to track payments and sell entries on your PayPal POS.</Empty>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <Stat label="Entry fee" value={money(ev.entry_fee_cents, ev.currency)} />
+        <Stat label="Paid" value={p.paidCount} />
+        <Stat label="Still owe" value={p.owing} />
+        <Stat label="Collected" value={money(totals.pos + totals.cash, ev.currency)} />
+      </div>
+
+      <div className="card flex flex-wrap items-center gap-3">
+        <div className="min-w-0 flex-1 text-sm">
+          {p.onPos ? (
+            <>
+              <b>On PayPal POS</b> as “Entry · {ev.name}”. At the desk, press <i>Collect on POS</i> next to a player and ring the entry
+              up on the POS; the sale is matched to them automatically.
+            </>
+          ) : (
+            <>Add this entry fee to your PayPal POS as a product, so staff can ring it up and Event Hub marks players paid.</>
+          )}
+          <div className="mt-1 text-xs text-slate-500">
+            POS: {money(totals.pos, ev.currency)} · desk: {money(totals.cash, ev.currency)}
+            {p.refunded ? ` · ${p.refunded} refunded` : ''}
+          </div>
+        </div>
+        {p.onPos ? (
+          <>
+            <button className="btn-secondary btn-sm" disabled={busy} onClick={() => run(() => api('/api/pos/sync', {}))}>
+              Sync now
+            </button>
+            <button
+              className="btn-secondary btn-sm"
+              disabled={busy}
+              onClick={() =>
+                confirm('Stop matching POS sales to this event? (The product stays on the POS — delete it there if needed.)') &&
+                run(() => api(`/api/events/${ev.id}/pos/product`, undefined, 'DELETE'))
+              }
+            >
+              Unlink from POS
+            </button>
+          </>
+        ) : (
+          <button className="btn-primary" disabled={busy} onClick={() => run(() => api(`/api/events/${ev.id}/pos/product`, {}))}>
+            Add to PayPal POS
+          </button>
+        )}
+        <a className="btn-secondary btn-sm" href={`/api/events/${ev.id}/payments.csv`}>
+          Payments CSV
+        </a>
+      </div>
+      <ErrorNote error={error} />
+
+      {(p.unassigned?.length ?? 0) > 0 && (
+        <div className="card space-y-2 border-amber-300 dark:border-amber-800">
+          <h3 className="font-semibold">Unassigned POS sales</h3>
+          <p className="text-xs text-slate-500">These entries were rung up without a player selected. Pick who paid.</p>
+          <ul className="divide-y divide-slate-100 dark:divide-slate-800">
+            {p.unassigned!.map((sale) => (
+              <li key={sale.id} className="flex flex-wrap items-center gap-2 py-2 text-sm">
+                <span className="flex-1">
+                  POS #{sale.posNumber} · {money(sale.amountCents, sale.currency)}
+                  {sale.soldAt && ` · ${new Date(sale.soldAt).toLocaleTimeString()}`}
+                  {sale.seller && ` · ${sale.seller}`}
+                  {sale.status === 'refunded' && <span className="pill ml-2 bg-rose-100 text-rose-800">refunded</span>}
+                </span>
+                {sale.status === 'paid' && (
+                  <>
+                    <select
+                      className="input w-auto py-1"
+                      value={pick[sale.id] ?? ''}
+                      onChange={(e) => setPick({ ...pick, [sale.id]: Number(e.target.value) })}
+                    >
+                      <option value="">Who paid?</option>
+                      {unpaid.map((r) => (
+                        <option key={r.playerId} value={r.playerId}>
+                          {r.name}
+                        </option>
+                      ))}
+                    </select>
+                    <button
+                      className="btn-primary btn-sm"
+                      disabled={busy || !pick[sale.id]}
+                      onClick={() => run(() => api(`/api/payments/${sale.id}/assign`, { playerId: pick[sale.id] }))}
+                    >
+                      Assign
+                    </button>
+                  </>
+                )}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      <div className="card">
+        <h3 className="mb-2 font-semibold">Players</h3>
+        <ul className="divide-y divide-slate-100 dark:divide-slate-800">
+          {state.registrations
+            .filter((r) => r.status !== 'waitlist')
+            .map((r) => (
+              <li key={r.playerId} className="flex flex-wrap items-center gap-2 py-2 text-sm">
+                <span className="flex-1 font-medium">{r.name}</span>
+                {r.status === 'dropped' ? (
+                  <PaymentBadge payment={r.payment} />
+                ) : (
+                  <PaymentActions state={state} playerId={r.playerId} payment={r.payment} waitingSince={r.waitingForPosSince} onError={setError} />
+                )}
+              </li>
+            ))}
+        </ul>
       </div>
     </div>
   );

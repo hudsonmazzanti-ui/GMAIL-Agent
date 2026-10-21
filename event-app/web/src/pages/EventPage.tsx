@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { api, formatDate, record, type EventState, type MatchView, type RoundView } from '../api';
+import { api, formatDate, money, record, type EventState, type MatchView, type RoundView } from '../api';
 import { Bracket } from '../components/Bracket';
 import { ResultForm } from '../components/ResultForm';
 import { RoundTimer } from '../components/RoundTimer';
@@ -43,7 +43,11 @@ export function EventPage() {
           {[formatDate(ev.date, ev.start_time), ev.game, ev.format, `Best of ${ev.best_of}`].filter(Boolean).join(' · ')}
         </p>
         {ev.description && <p className="whitespace-pre-line pt-2 text-sm">{ev.description}</p>}
-        {ev.entry_fee_note && <p className="text-sm text-slate-600 dark:text-slate-300">Entry: {ev.entry_fee_note}</p>}
+        {(ev.entry_fee_cents > 0 || ev.entry_fee_note) && (
+          <p className="text-sm text-slate-600 dark:text-slate-300">
+            Entry: {[ev.entry_fee_cents > 0 && money(ev.entry_fee_cents, ev.currency), ev.entry_fee_note].filter(Boolean).join(' · ')}
+          </p>
+        )}
       </header>
 
       {state.champion && (
@@ -177,6 +181,18 @@ function PlayerPanel({ state, clockSkew }: { state: EventState; clockSkew: numbe
 
       {preStart && reg.status !== 'checked_in' && (
         <p className="text-sm text-slate-600 dark:text-slate-300">Check in at the front desk when you arrive.</p>
+      )}
+      {ev.entry_fee_cents > 0 && reg.status !== 'waitlist' && (
+        <p className="text-sm">
+          Entry {money(ev.entry_fee_cents, ev.currency)}:{' '}
+          {reg.payment?.status === 'paid' ? (
+            <span className="font-semibold text-emerald-700 dark:text-emerald-400">Paid ✓</span>
+          ) : reg.payment?.status === 'refunded' ? (
+            <span className="font-semibold text-rose-600">Refunded</span>
+          ) : (
+            <span className="font-semibold text-amber-700 dark:text-amber-400">Pay at the front desk</span>
+          )}
+        </p>
       )}
 
       {running && reg.status !== 'dropped' && round && (

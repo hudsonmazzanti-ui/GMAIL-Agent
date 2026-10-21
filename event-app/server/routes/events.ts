@@ -19,6 +19,9 @@ type EventBody = Partial<{
   roundMinutes: number;
   winPoints: number;
   drawPoints: number;
+  entryFeeCents: number;
+  currency: string;
+  requirePayment: boolean;
 }>;
 
 const COLUMNS: Record<keyof EventBody, keyof EventRow> = {
@@ -36,6 +39,9 @@ const COLUMNS: Record<keyof EventBody, keyof EventRow> = {
   roundMinutes: 'round_minutes',
   winPoints: 'win_points',
   drawPoints: 'draw_points',
+  entryFeeCents: 'entry_fee_cents',
+  currency: 'currency',
+  requirePayment: 'require_payment',
 };
 
 /** Settings that change how pairings/results work are locked once the event starts. */
@@ -102,7 +108,8 @@ export function eventRoutes(app: FastifyInstance, db: DB) {
   });
 
   app.get<{ Params: { id: string } }>('/api/events/:id/state', async (req) => {
-    const state = t.eventState(db, id(req.params));
+    const v = req.viewer;
+    const state = t.eventState(db, id(req.params), { staff: v.kind === 'staff', playerId: v.kind === 'player' ? v.playerId : undefined });
     if (state.event.status === 'draft' && req.viewer.kind !== 'staff') throw new t.HttpError(404, 'Event not found');
     return state;
   });
@@ -160,7 +167,8 @@ function updateEvent(db: DB, eventId: number, body: EventBody) {
   for (const [key, value] of Object.entries(body) as [keyof EventBody, unknown][]) {
     const column = COLUMNS[key];
     if (!column || value === undefined) continue;
-    const normalized = value === '' && (key === 'capacity' || key === 'swissRounds') ? null : value;
+    const normalized =
+      key === 'requirePayment' ? (value ? 1 : 0) : value === '' && (key === 'capacity' || key === 'swissRounds') ? null : value;
     if (normalized === ev[column]) continue;
     if (started && LOCKED_AFTER_START.has(key)) {
       throw new t.HttpError(400, `${key} can't change after the event starts`);
@@ -170,6 +178,13 @@ function updateEvent(db: DB, eventId: number, body: EventBody) {
       if (ev.status !== 'swiss' || typeof normalized !== 'number' || normalized < played) throw new t.HttpError(400, `Swiss rounds can't go below ${played}`);
     }
     if (key === 'topCutSize' && ev.status !== 'swiss' && started) throw new t.HttpError(400, 'Top cut is already decided');
+    if ((key === 'entryFeeCents' || key === 'currency') && ev.pos_product_uuid) {
+      throw new t.HttpError(400, 'The fee is linked to a POS product — unlink it from the POS first to change the price');
+    }
+    if (key === 'entryFeeCents' && (!Number.isInteger(normalized) || (normalized as number) < 0)) {
+      throw new t.HttpError(400, 'Entry fee must be a whole number of cents');
+    }
+    if (key === 'currency' && !/^[A-Z]{3}$/.test(String(normalized))) throw new t.HttpError(400, 'Currency must be a 3-letter code');
     db.prepare(`UPDATE events SET ${column} = ? WHERE id = ?`).run(normalized as string | number | null, eventId);
   }
 }

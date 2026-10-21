@@ -14,7 +14,12 @@ export interface EventFormValues {
   topCutSize: number;
   bestOf: number;
   roundMinutes: number;
+  entryFeeCents: number;
+  currency: string;
+  requirePayment: boolean;
 }
+
+export const CURRENCIES = ['USD', 'CAD', 'GBP', 'EUR', 'AUD', 'NZD', 'SEK', 'NOK', 'DKK', 'CHF', 'MXN', 'BRL'];
 
 export const fromRow = (e: EventRow): EventFormValues => ({
   name: e.name,
@@ -29,6 +34,9 @@ export const fromRow = (e: EventRow): EventFormValues => ({
   topCutSize: e.top_cut_size,
   bestOf: e.best_of,
   roundMinutes: e.round_minutes,
+  entryFeeCents: e.entry_fee_cents,
+  currency: e.currency,
+  requirePayment: !!e.require_payment,
 });
 
 const EMPTY: EventFormValues = {
@@ -44,11 +52,15 @@ const EMPTY: EventFormValues = {
   topCutSize: 8,
   bestOf: 3,
   roundMinutes: 50,
+  entryFeeCents: 0,
+  currency: 'USD',
+  requirePayment: false,
 };
 
 export function EventForm({
   initial,
   started = false,
+  feeLocked = false,
   recommendedRounds,
   submitLabel,
   busy,
@@ -56,17 +68,20 @@ export function EventForm({
 }: {
   initial?: EventFormValues;
   started?: boolean;
+  /** The fee is linked to a PayPal POS product, so the price can't change here. */
+  feeLocked?: boolean;
   recommendedRounds?: number;
   submitLabel: string;
   busy?: boolean;
   onSubmit: (v: EventFormValues) => void;
 }) {
   const [v, setV] = useState<EventFormValues>(initial ?? EMPTY);
+  const [fee, setFee] = useState(() => ((initial ?? EMPTY).entryFeeCents / 100).toFixed(2));
   const set = <K extends keyof EventFormValues>(k: K, value: EventFormValues[K]) => setV({ ...v, [k]: value });
   const num = (s: string) => (s === '' ? null : Number(s));
   const submit = (e: FormEvent) => {
     e.preventDefault();
-    onSubmit(v);
+    onSubmit({ ...v, entryFeeCents: Math.round(Number(fee || 0) * 100) });
   };
 
   return (
@@ -96,8 +111,34 @@ export function EventForm({
         <input className="input" type="number" min={2} value={v.capacity ?? ''} onChange={(e) => set('capacity', num(e.target.value))} />
       </label>
       <label>
-        <span className="label">Entry fee / prizes note</span>
-        <input className="input" value={v.entryFeeNote} onChange={(e) => set('entryFeeNote', e.target.value)} placeholder="$10 · packs to top 4" />
+        <span className="label">Prizes / entry note</span>
+        <input className="input" value={v.entryFeeNote} onChange={(e) => set('entryFeeNote', e.target.value)} placeholder="Packs to top 4" />
+      </label>
+      <div className="grid grid-cols-[1fr_auto] gap-2">
+        <label>
+          <span className="label">Entry fee{feeLocked ? ' (on POS)' : ''}</span>
+          <input
+            className="input"
+            type="number"
+            min={0}
+            step="0.01"
+            disabled={feeLocked}
+            value={fee}
+            onChange={(e) => setFee(e.target.value)}
+          />
+        </label>
+        <label>
+          <span className="label">Currency</span>
+          <select className="input" disabled={feeLocked} value={v.currency} onChange={(e) => set('currency', e.target.value)}>
+            {CURRENCIES.map((c) => (
+              <option key={c}>{c}</option>
+            ))}
+          </select>
+        </label>
+      </div>
+      <label className="flex items-center gap-2 self-end pb-2 text-sm">
+        <input type="checkbox" checked={v.requirePayment} onChange={(e) => set('requirePayment', e.target.checked)} />
+        Require the entry fee to be paid before check-in
       </label>
       <label>
         <span className="label">Match length</span>

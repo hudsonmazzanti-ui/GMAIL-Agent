@@ -3,6 +3,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import qrcode from 'qrcode-terminal';
 import { buildApp } from './app.js';
+import { broadcast } from './live.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.PORT ?? 3000);
@@ -15,8 +16,10 @@ function lanAddresses(): string[] {
     .map((i) => i.address);
 }
 
-const { app } = await buildApp({ dbPath: DB_PATH });
+const { app, pos } = await buildApp({ dbPath: DB_PATH });
 await app.listen({ port: PORT, host: '0.0.0.0' });
+// Pull PayPal POS sales in the background (no-op until a POS API key is saved).
+pos.startPolling((eventIds) => eventIds.forEach(broadcast));
 
 const urls = lanAddresses().map((ip) => `http://${ip}:${PORT}`);
 console.log(`\n  Event app running.  Database: ${DB_PATH}\n`);
